@@ -126,6 +126,8 @@ pnpm --filter @mechmarathon/server add <package>
 - [x] ~~GitHub remote repository~~ — `yoyot1/mechmarathon` configured
 - [x] ~~Implement auth routes (register, login, JWT middleware)~~ — Done (POST /register, POST /login, GET /me, Pinia store, router guards)
 - [x] ~~Implement lobby CRUD + Socket.IO lobby events~~ — Done (REST: POST/GET /api/lobbies, Socket: join/leave/ready/start, Pinia store, LobbyListView + LobbyView)
-- [ ] Implement core game engine (card dealing, programming, execution)
-- [ ] Build PixiJS board renderer
-- [ ] Build card programming UI
+- [x] ~~Implement core game engine (card dealing, programming, execution)~~ — Done (shared game logic, GameInstance, GameManager, socket handlers, Pinia store, CSS grid board view)
+- [x] ~~Build card programming UI~~ — Done (register slots, hand cards, submit, timer, integrated into GameView)
+- [ ] Build PixiJS board renderer (currently CSS grid — functional but minimal)
+- [ ] Add unit tests for shared game logic
+- [ ] Implement reputation updates on game completion

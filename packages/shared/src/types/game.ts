@@ -33,6 +33,8 @@ export interface Robot {
   health: number;
   lives: number;
   checkpoint: number;
+  /** True when the robot is virtual (non-colliding) — first turn or stacked */
+  virtual: boolean;
 }
 
 /** Board tile types */
@@ -65,6 +67,21 @@ export interface Board {
   tiles: Tile[][];
 }
 
+/** Board definition — a reusable board layout */
+export interface BoardDefinition {
+  id: string;
+  name: string;
+  width: number;
+  height: number;
+  tiles: Tile[][];
+}
+
+/** Checkpoint overlay configuration */
+export interface CheckpointConfig {
+  position: Position;
+  number: number;
+}
+
 /** Phases of a game round */
 export type GamePhase =
   | 'waiting'
@@ -89,5 +106,54 @@ export interface GameState {
   currentRegister: number;
   round: number;
   totalCheckpoints: number;
+  checkpoints: CheckpointConfig[];
   winnerId: string | null;
+}
+
+/** Types of events that occur during execution */
+export type ExecutionEventType =
+  | 'move'
+  | 'rotate'
+  | 'push'
+  | 'fall'
+  | 'checkpoint'
+  | 'repair'
+  | 'conveyor'
+  | 'gear'
+  | 'respawn';
+
+/** An event that occurs during register execution */
+export interface ExecutionEvent {
+  type: ExecutionEventType;
+  robotId: string;
+  from?: Position;
+  to?: Position;
+  direction?: Direction;
+  details?: string;
+}
+
+/** Payload sent when cards are dealt */
+export interface CardsDealtPayload {
+  hand: Card[];
+  timerSeconds: number;
+}
+
+/** Payload sent for each register execution */
+export interface ExecutePayload {
+  registerIndex: number;
+  events: ExecutionEvent[];
+  updatedRobots: Robot[];
+}
+
+/** Payload sent on phase change */
+export interface PhaseChangePayload {
+  phase: GamePhase;
+  round: number;
+  timerSeconds?: number;
+}
+
+/** Payload sent when game ends */
+export interface GameOverPayload {
+  winnerId: string;
+  finalState: GameState;
 }

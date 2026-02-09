@@ -7,6 +7,7 @@ import { authRouter } from './routes/auth.js';
 import { lobbyRouter } from './routes/lobby.js';
 import { registerAuthMiddleware } from './socket/authMiddleware.js';
 import { registerLobbyHandlers } from './socket/lobbyHandlers.js';
+import { registerGameHandlers } from './socket/gameHandlers.js';
 
 dotenv.config();
 
@@ -41,6 +42,7 @@ io.on('connection', (socket) => {
   console.log(`Player connected: ${socket.id} (user: ${socket.data.userId})`);
 
   registerLobbyHandlers(io, socket);
+  registerGameHandlers(io, socket);
 
   socket.on('disconnect', () => {
     console.log(`Player disconnected: ${socket.id}`);

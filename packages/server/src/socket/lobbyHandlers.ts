@@ -3,6 +3,8 @@ import { EVENTS, GAME, ROBOT_COLORS } from '@mechmarathon/shared';
 import type { Lobby } from '@mechmarathon/shared';
 import { prisma } from '../lib/prisma.js';
 import { toLobby, lobbyInclude } from '../lib/lobbyUtils.js';
+import { GameManager } from '../game/GameManager.js';
+import { getOrCreateBot } from '../game/BotPlayer.js';
 
 function lobbyRoom(gameId: string): string {
   return `lobby:${gameId}`;
@@ -107,6 +109,46 @@ export function registerLobbyHandlers(io: Server, socket: Socket): void {
     ack?.({});
   });
 
+  // lobby:add_bot — Host adds an AI bot to the lobby
+  socket.on(EVENTS.LOBBY_ADD_BOT, async (data: { lobbyId: string }, ack?: (res: { error?: string }) => void) => {
+    const { lobbyId } = data;
+
+    const game = await prisma.game.findUnique({
+      where: { id: lobbyId },
+      include: lobbyInclude,
+    });
+
+    if (!game || game.status !== 'waiting') {
+      ack?.({ error: 'Lobby not found' });
+      return;
+    }
+
+    if (game.hostId !== userId) {
+      ack?.({ error: 'Only the host can add bots' });
+      return;
+    }
+
+    if (game.players.length >= game.maxPlayers) {
+      ack?.({ error: 'Lobby is full' });
+      return;
+    }
+
+    // Count existing bots to pick the next bot index
+    const botCount = game.players.filter((p) => p.user.email.endsWith('@mechmarathon.local')).length;
+    const bot = await getOrCreateBot(botCount);
+
+    // Pick available color
+    const usedColors = new Set(game.players.map((p) => p.color));
+    const color = ROBOT_COLORS.find((c) => !usedColors.has(c)) ?? ROBOT_COLORS[0];
+
+    await prisma.gamePlayer.create({
+      data: { gameId: lobbyId, userId: bot.id, color, ready: true },
+    });
+
+    await broadcastLobbyUpdate(io, lobbyId);
+    ack?.({});
+  });
+
   // lobby:start — Host starts the game
   socket.on(EVENTS.LOBBY_START, async (data: { lobbyId: string }, ack?: (res: { error?: string }) => void) => {
     const { lobbyId } = data;
@@ -142,6 +184,17 @@ export function registerLobbyHandlers(io: Server, socket: Socket): void {
       where: { id: lobbyId },
       data: { status: 'in_progress' },
     });
+
+    // Create in-memory game instance
+    const playerInfos = game.players.map((p) => ({
+      userId: p.userId,
+      username: p.user.username,
+      color: p.color,
+    }));
+    const botIds = game.players
+      .filter((p) => p.user.email.endsWith('@mechmarathon.local'))
+      .map((p) => p.userId);
+    GameManager.createGame(lobbyId, playerInfos, io, botIds);
 
     const lobby = await broadcastLobbyUpdate(io, lobbyId);
     ack?.({ lobby: lobby ?? undefined } as { error?: string });

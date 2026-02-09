@@ -3,7 +3,8 @@ import { computed, onMounted, onUnmounted, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useLobbyStore } from '../stores/lobby';
 import { useAuthStore } from '../stores/auth';
-import { connectSocket } from '../lib/socket';
+import { connectSocket, getSocket } from '../lib/socket';
+import { EVENTS } from '@mechmarathon/shared';
 
 const route = useRoute();
 const router = useRouter();
@@ -68,6 +69,18 @@ async function handleStart() {
   }
 }
 
+async function handleAddBot() {
+  const socket = getSocket();
+  if (!socket) return;
+  socket.emit(EVENTS.LOBBY_ADD_BOT, { lobbyId: lobbyId.value }, (res: { error?: string }) => {
+    if (res.error) lobby.error = res.error;
+  });
+}
+
+const canAddBot = computed(
+  () => isHost.value && lobby.currentLobby && lobby.currentLobby.players.length < lobby.currentLobby.maxPlayers,
+);
+
 async function handleLeave() {
   await lobby.leaveLobby(lobbyId.value);
   router.push('/lobby');
@@ -124,6 +137,14 @@ async function handleLeave() {
           @click="handleReady"
         >
           {{ currentPlayer?.ready ? 'Unready' : 'Ready Up' }}
+        </button>
+        <button
+          v-if="isHost"
+          class="btn btn-bot"
+          :disabled="!canAddBot"
+          @click="handleAddBot"
+        >
+          Add Bot
         </button>
         <button
           v-if="isHost"
@@ -249,6 +270,10 @@ async function handleLeave() {
   background: transparent;
   border: 2px solid #7b2ff7;
   color: #7b2ff7;
+}
+
+.btn-bot {
+  background: #3498db;
 }
 
 .btn-start {

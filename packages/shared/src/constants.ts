@@ -55,6 +55,7 @@ export const EVENTS = {
   LOBBY_START: 'lobby:start',
   LOBBY_UPDATE: 'lobby:update',
   LOBBY_LIST: 'lobby:list',
+  LOBBY_ADD_BOT: 'lobby:add_bot',
 
   // Game events
   GAME_STATE: 'game:state',

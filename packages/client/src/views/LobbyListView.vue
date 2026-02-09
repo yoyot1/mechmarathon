@@ -1,11 +1,11 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue';
+import { ref, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { GAME, LOBBY } from '@mechmarathon/shared';
 import type { LobbyVisibility } from '@mechmarathon/shared';
 import { useLobbyStore } from '../stores/lobby';
 import { useAuthStore } from '../stores/auth';
-import { connectSocket, disconnectSocket } from '../lib/socket';
+import { connectSocket } from '../lib/socket';
 
 const router = useRouter();
 const lobby = useLobbyStore();
@@ -22,9 +22,8 @@ onMounted(() => {
   lobby.fetchLobbies();
 });
 
-onUnmounted(() => {
-  disconnectSocket();
-});
+// Note: don't disconnect socket here — it stays alive for the whole session.
+// Disconnecting would trigger server-side disconnect handler and remove player from lobby.
 
 async function handleCreate() {
   const result = await lobby.createLobby({

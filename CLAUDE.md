@@ -113,7 +113,7 @@ pnpm --filter @mechmarathon/server add <package>
 
 ### Completed
 - [x] Project initialized: monorepo with `shared`, `server`, `client` packages
-- [x] Devcontainer configured (Node 20, Docker-in-Docker, PostgreSQL client, Vue/TS extensions)
+- [x] Devcontainer configured (Node 20, Docker-outside-of-Docker, PostgreSQL client, Vue/TS extensions)
 - [x] Shared types defined: Game, Board, Robot, Card, User, Lobby, constants
 - [x] Server scaffolded: Express + Socket.IO, Prisma schema (User, UserStats, Game, GamePlayer)
 - [x] Client scaffolded: Vue 3 + Vite, router (Home, Login, Register, LobbyList, Lobby, Game views)
@@ -121,11 +121,10 @@ pnpm --filter @mechmarathon/server add <package>
 - [x] Dependencies installed via pnpm
 
 ### Next Steps
-- [ ] Rebuild devcontainer to get Node 20 (currently on Node 18)
-- [ ] Create GitHub remote repository (`gh auth login` then `gh repo create`)
-- [ ] Initial git commit
-- [ ] Start PostgreSQL (`docker compose up -d`) and run first Prisma migration
-- [ ] Implement auth routes (register, login, JWT middleware)
+- [x] ~~Rebuild devcontainer to get Node 20~~ — Done (Node 20.20.0, switched to docker-outside-of-docker)
+- [x] ~~Start PostgreSQL and run first Prisma migration~~ — Done (migration `20260208040944_init` applied)
+- [x] ~~GitHub remote repository~~ — `yoyot1/mechmarathon` configured
+- [x] ~~Implement auth routes (register, login, JWT middleware)~~ — Done (POST /register, POST /login, GET /me, Pinia store, router guards)
 - [ ] Implement lobby CRUD + Socket.IO lobby events
 - [ ] Implement core game engine (card dealing, programming, execution)
 - [ ] Build PixiJS board renderer

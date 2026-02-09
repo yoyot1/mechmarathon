@@ -1,12 +1,13 @@
-import express from 'express';
+import express, { type Express } from 'express';
 import cors from 'cors';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
 import dotenv from 'dotenv';
+import { authRouter } from './routes/auth.js';
 
 dotenv.config();
 
-const app = express();
+const app: Express = express();
 const httpServer = createServer(app);
 const io = new Server(httpServer, {
   cors: {
@@ -22,6 +23,9 @@ app.use(express.json());
 app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
+
+// Auth routes
+app.use('/api/auth', authRouter);
 
 // Socket.IO connection handling
 io.on('connection', (socket) => {

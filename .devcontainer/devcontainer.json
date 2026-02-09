@@ -9,9 +9,7 @@
       "version": "20",
       "nodeGypDependencies": true
     },
-    "ghcr.io/devcontainers/features/docker-in-docker:1": {
-      "dockerDashComposeVersion": "v2"
-    },
+    "ghcr.io/devcontainers/features/docker-outside-of-docker:1": {},
     "ghcr.io/robbert229/devcontainer-features/postgresql-client:1": {}
   },
   "mounts": [
@@ -35,11 +33,24 @@
       }
     }
   },
-  "forwardPorts": [5173, 3000, 5432],
+  "forwardPorts": [
+    5173,
+    3000,
+    5432
+  ],
   "portsAttributes": {
-    "5173": { "label": "Client (Vite)", "onAutoForward": "notify" },
-    "3000": { "label": "Server (API)", "onAutoForward": "notify" },
-    "5432": { "label": "PostgreSQL", "onAutoForward": "silent" }
+    "5173": {
+      "label": "Client (Vite)",
+      "onAutoForward": "notify"
+    },
+    "3000": {
+      "label": "Server (API)",
+      "onAutoForward": "notify"
+    },
+    "5432": {
+      "label": "PostgreSQL",
+      "onAutoForward": "silent"
+    }
   },
   "postCreateCommand": "npm install -g pnpm && cd /workspaces/mechmarathon && pnpm install",
   "remoteUser": "vscode"

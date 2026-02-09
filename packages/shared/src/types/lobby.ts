@@ -24,3 +24,15 @@ export interface LobbyPlayer {
   ready: boolean;
   color: string;
 }
+
+/** Request body for creating a lobby */
+export interface CreateLobbyRequest {
+  name: string;
+  visibility: LobbyVisibility;
+  maxPlayers: number;
+}
+
+/** Error response from lobby operations */
+export interface LobbyError {
+  error: string;
+}

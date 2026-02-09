@@ -4,6 +4,9 @@ import { createServer } from 'http';
 import { Server } from 'socket.io';
 import dotenv from 'dotenv';
 import { authRouter } from './routes/auth.js';
+import { lobbyRouter } from './routes/lobby.js';
+import { registerAuthMiddleware } from './socket/authMiddleware.js';
+import { registerLobbyHandlers } from './socket/lobbyHandlers.js';
 
 dotenv.config();
 
@@ -27,9 +30,17 @@ app.get('/api/health', (_req, res) => {
 // Auth routes
 app.use('/api/auth', authRouter);
 
+// Lobby routes
+app.use('/api/lobbies', lobbyRouter);
+
+// Socket.IO auth middleware
+registerAuthMiddleware(io);
+
 // Socket.IO connection handling
 io.on('connection', (socket) => {
-  console.log(`Player connected: ${socket.id}`);
+  console.log(`Player connected: ${socket.id} (user: ${socket.data.userId})`);
+
+  registerLobbyHandlers(io, socket);
 
   socket.on('disconnect', () => {
     console.log(`Player disconnected: ${socket.id}`);

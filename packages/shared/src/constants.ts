@@ -7,6 +7,24 @@ export const AUTH = {
   BCRYPT_ROUNDS: 12,
 } as const;
 
+/** Lobby configuration constants */
+export const LOBBY = {
+  NAME_MIN_LENGTH: 3,
+  NAME_MAX_LENGTH: 40,
+} as const;
+
+/** Robot color palette */
+export const ROBOT_COLORS = [
+  '#e74c3c', // red
+  '#3498db', // blue
+  '#2ecc71', // green
+  '#f39c12', // orange
+  '#9b59b6', // purple
+  '#1abc9c', // teal
+  '#e67e22', // dark orange
+  '#e84393', // pink
+] as const;
+
 /** Game configuration constants */
 export const GAME = {
   MIN_PLAYERS: 2,

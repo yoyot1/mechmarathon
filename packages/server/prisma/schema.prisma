@@ -58,6 +58,7 @@ model GamePlayer {
   gameId   String  @map("game_id")
   userId   String  @map("user_id")
   color    String
+  ready    Boolean @default(false)
   finished Boolean @default(false)
   placement Int?
 

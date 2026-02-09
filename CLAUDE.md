@@ -125,7 +125,7 @@ pnpm --filter @mechmarathon/server add <package>
 - [x] ~~Start PostgreSQL and run first Prisma migration~~ — Done (migration `20260208040944_init` applied)
 - [x] ~~GitHub remote repository~~ — `yoyot1/mechmarathon` configured
 - [x] ~~Implement auth routes (register, login, JWT middleware)~~ — Done (POST /register, POST /login, GET /me, Pinia store, router guards)
-- [ ] Implement lobby CRUD + Socket.IO lobby events
+- [x] ~~Implement lobby CRUD + Socket.IO lobby events~~ — Done (REST: POST/GET /api/lobbies, Socket: join/leave/ready/start, Pinia store, LobbyListView + LobbyView)
 - [ ] Implement core game engine (card dealing, programming, execution)
 - [ ] Build PixiJS board renderer
 - [ ] Build card programming UI

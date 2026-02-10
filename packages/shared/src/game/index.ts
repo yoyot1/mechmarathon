@@ -4,5 +4,5 @@ export { DEFAULT_BOARD, getDefaultCheckpoints } from './board.js';
 export {
   executeCard, moveRobot,
   processExpressConveyors, processAllConveyors, processGears, processCheckpoints, processRepair,
-  handleRobotDeath, executeRegister, checkWinCondition, updateVirtualStatus,
+  handleRobotDeath, executeRegister, executeRegisterSteps, checkWinCondition, updateVirtualStatus,
 } from './execution.js';

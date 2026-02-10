@@ -1,9 +1,12 @@
 import type { Server } from 'socket.io';
 import {
-  type Board, type Card, type CheckpointConfig, type ExecutePayload, type GameOverPayload,
-  type GamePhase, type GameState, type PhaseChangePayload, type Robot,
-  EVENTS, GAME, ROBOT_COLORS,
-  createDeck, shuffleDeck, dealCards, executeRegister, checkWinCondition, updateVirtualStatus,
+  type Board, type Card, type CheckpointConfig, type Direction, type DirectionNeededPayload,
+  type ExecutePayload, type ExecutionStep, type GameOverPayload,
+  type GamePhase, type GameState, type PhaseChangePayload, type ProgramsPayload, type Robot,
+  type SpeedChangePayload, type DebugModePayload,
+  EVENTS, GAME, SPEED, ROBOT_COLORS,
+  createDeck, shuffleDeck, dealCards, executeRegisterSteps, checkWinCondition, updateVirtualStatus,
+  processCheckpoints,
   DEFAULT_BOARD, getDefaultCheckpoints,
 } from '@mechmarathon/shared';
 
@@ -29,6 +32,12 @@ export class GameInstance {
   private disconnectedPlayers = new Set<string>();
   private programmingTimer: ReturnType<typeof setTimeout> | null = null;
   private botPlayerIds = new Set<string>();
+  private executionSpeed: 1 | 2 | 3 = 1;
+  private pendingDirectionChoices = new Set<string>();
+  private directionChoiceTimer: ReturnType<typeof setTimeout> | null = null;
+  private directionResolve: (() => void) | null = null;
+  private debugMode = false;
+  private debugActionResolve: ((action: 'forward' | 'back') => void) | null = null;
 
   constructor(id: string, playerInfos: PlayerInfo[], io: Server, botPlayerIds?: string[]) {
     this.id = id;
@@ -54,10 +63,19 @@ export class GameInstance {
       lives: GAME.STARTING_LIVES,
       checkpoint: 0,
       virtual: true,
+      archivePosition: { ...startPos },
     }));
+
+    // Auto-capture checkpoint 1 since robots start on it
+    processCheckpoints(this.robots, this.checkpoints);
 
     if (botPlayerIds) {
       for (const id of botPlayerIds) this.botPlayerIds.add(id);
+    }
+
+    // All players need to choose initial direction in round 1
+    for (const p of playerInfos) {
+      this.pendingDirectionChoices.add(p.userId);
     }
 
     this.startRound();
@@ -108,6 +126,28 @@ export class GameInstance {
       }
     }
 
+    // If any players need to choose direction, notify them
+    if (this.pendingDirectionChoices.size > 0) {
+      const payload: DirectionNeededPayload = {
+        playerIds: [...this.pendingDirectionChoices],
+        reason: 'initial',
+        timeoutSeconds: SPEED.DIRECTION_CHOICE_TIMEOUT_SECONDS,
+      };
+      this.io.to(this.gameRoom()).emit(EVENTS.GAME_DIRECTION_NEEDED, payload);
+
+      // Auto-choose for bots
+      for (const botId of this.botPlayerIds) {
+        if (this.pendingDirectionChoices.has(botId)) {
+          const dirs: Direction[] = ['north', 'east', 'south', 'west'];
+          const robot = this.robots.find((r) => r.playerId === botId);
+          if (robot) {
+            robot.direction = dirs[Math.floor(Math.random() * dirs.length)];
+          }
+          this.pendingDirectionChoices.delete(botId);
+        }
+      }
+    }
+
     // Start programming timer
     this.programmingTimer = setTimeout(() => {
       this.onProgrammingTimerExpired();
@@ -117,7 +157,7 @@ export class GameInstance {
     this.submitBotPrograms();
   }
 
-  submitProgram(userId: string, cardIds: string[]): { error?: string } {
+  submitProgram(userId: string, cardIds: string[], direction?: Direction): { error?: string } {
     if (this.phase !== 'programming') {
       return { error: 'Not in programming phase' };
     }
@@ -127,6 +167,14 @@ export class GameInstance {
 
     if (cardIds.length !== GAME.REGISTERS_PER_ROUND) {
       return { error: `Must program exactly ${GAME.REGISTERS_PER_ROUND} registers` };
+    }
+
+    // If player needs to choose direction, require it
+    if (this.pendingDirectionChoices.has(userId)) {
+      if (!direction) return { error: 'Must choose a starting direction' };
+      const robot = this.robots.find((r) => r.playerId === userId);
+      if (robot) robot.direction = direction;
+      this.pendingDirectionChoices.delete(userId);
     }
 
     // Validate all card IDs are from the player's hand
@@ -163,6 +211,14 @@ export class GameInstance {
   private onProgrammingTimerExpired(): void {
     this.programmingTimer = null;
 
+    // Auto-choose direction for players who haven't chosen
+    for (const playerId of this.pendingDirectionChoices) {
+      // Default to north
+      const robot = this.robots.find((r) => r.playerId === playerId);
+      if (robot) robot.direction = 'north';
+    }
+    this.pendingDirectionChoices.clear();
+
     // Auto-fill programs for players who haven't submitted
     for (const robot of this.robots) {
       if (robot.lives <= 0) continue;
@@ -198,10 +254,25 @@ export class GameInstance {
     this.phase = 'executing';
     this.broadcastPhaseChange();
 
-    const respawnPos = this.checkpoints.find((c) => c.number === 1)!.position;
+    // Broadcast all players' programs so clients can display them
+    const programsRecord: Record<string, Card[]> = {};
+    for (const [playerId, prog] of this.programs) {
+      const cards = prog.filter((c): c is Card => c !== null);
+      programsRecord[playerId] = cards;
+    }
+    const programsPayload: ProgramsPayload = { programs: programsRecord };
+    this.io.to(this.gameRoom()).emit(EVENTS.GAME_PROGRAMS, programsPayload);
+
+    // Pre-compute all execution steps across all registers
+    interface RegisterResult {
+      registerIndex: number;
+      steps: ExecutionStep[];
+      winnerId: string | null;
+    }
+
+    const allRegisters: RegisterResult[] = [];
 
     for (let reg = 0; reg < GAME.REGISTERS_PER_ROUND; reg++) {
-      // Gather cards for this register
       const playerCards = new Map<string, Card>();
       for (const robot of this.robots) {
         if (robot.lives <= 0) continue;
@@ -211,53 +282,242 @@ export class GameInstance {
         if (card) playerCards.set(robot.playerId, card);
       }
 
-      // Execute the register
-      const events = executeRegister(
-        reg,
-        playerCards,
-        this.robots,
-        this.board,
-        this.checkpoints,
-        respawnPos,
-      );
-
-      // Update virtual status after each register
+      const steps = executeRegisterSteps(reg, playerCards, this.robots, this.board, this.checkpoints);
       updateVirtualStatus(this.robots);
 
-      // Broadcast execution result
-      const payload: ExecutePayload = {
-        registerIndex: reg,
-        events,
-        updatedRobots: this.robots.map((r) => ({ ...r, position: { ...r.position } })),
-      };
-      this.io.to(this.gameRoom()).emit(EVENTS.GAME_EXECUTE, payload);
-
-      // Check win condition
       const winner = checkWinCondition(this.robots, this.checkpoints.length);
-      if (winner) {
-        this.winnerId = winner;
-        this.phase = 'finished';
-        const gameOverPayload: GameOverPayload = {
-          winnerId: winner,
-          finalState: this.toGameState(),
-        };
-        this.io.to(this.gameRoom()).emit(EVENTS.GAME_OVER, gameOverPayload);
-        return;
+      allRegisters.push({ registerIndex: reg, steps, winnerId: winner });
+
+      if (winner) break;
+    }
+
+    if (this.debugMode) {
+      // Build a flat list of all steps across all registers for navigation
+      const globalSteps: { registerIndex: number; step: ExecutionStep; localIndex: number; localTotal: number }[] = [];
+      for (const reg of allRegisters) {
+        for (let i = 0; i < reg.steps.length; i++) {
+          globalSteps.push({
+            registerIndex: reg.registerIndex,
+            step: reg.steps[i],
+            localIndex: i,
+            localTotal: reg.steps.length,
+          });
+        }
       }
 
-      // Delay between registers for animation
-      if (reg < GAME.REGISTERS_PER_ROUND - 1) {
-        await this.delay(1500);
+      if (globalSteps.length > 0) {
+        let idx = 0;
+        this.broadcastDebugStep(globalSteps, idx);
+
+        // Navigate through steps: forward advances, back goes to previous
+        while (idx < globalSteps.length - 1) {
+          const action = await this.waitForDebugAction();
+          if (action === 'forward') {
+            idx++;
+            this.broadcastDebugStep(globalSteps, idx);
+          } else if (action === 'back') {
+            if (idx > 0) {
+              idx--;
+              this.broadcastDebugStep(globalSteps, idx);
+            }
+          }
+        }
+        // Wait for final forward step to advance past the last step
+        await this.waitForDebugAction();
+      }
+    } else {
+      // Non-debug: broadcast each register's events as a single payload with animation delays
+      for (const reg of allRegisters) {
+        const allEvents = reg.steps.flatMap((s) => s.events);
+        const robotsAfter = reg.steps.length > 0
+          ? reg.steps[reg.steps.length - 1].robotsAfter
+          : this.robots.map((r) => ({ ...r, position: { ...r.position } }));
+
+        const payload: ExecutePayload = {
+          registerIndex: reg.registerIndex,
+          stepIndex: -1,
+          totalSteps: -1,
+          stepLabel: '',
+          events: allEvents,
+          updatedRobots: robotsAfter,
+        };
+        this.io.to(this.gameRoom()).emit(EVENTS.GAME_EXECUTE, payload);
+
+        if (reg.winnerId) {
+          this.winnerId = reg.winnerId;
+          this.phase = 'finished';
+          const gameOverPayload: GameOverPayload = {
+            winnerId: reg.winnerId,
+            finalState: this.toGameState(),
+          };
+          this.io.to(this.gameRoom()).emit(EVENTS.GAME_OVER, gameOverPayload);
+          return;
+        }
+
+        if (reg.registerIndex < allRegisters[allRegisters.length - 1].registerIndex) {
+          await this.delay(SPEED.REGISTER_DELAY_MS / this.executionSpeed);
+        }
       }
     }
 
-    // Round complete — start next round
+    // Check for win from last register
+    const lastReg = allRegisters[allRegisters.length - 1];
+    if (lastReg.winnerId) {
+      this.winnerId = lastReg.winnerId;
+      this.phase = 'finished';
+      const gameOverPayload: GameOverPayload = {
+        winnerId: lastReg.winnerId,
+        finalState: this.toGameState(),
+      };
+      this.io.to(this.gameRoom()).emit(EVENTS.GAME_OVER, gameOverPayload);
+      return;
+    }
+
+    // Round complete — cleanup phase
     this.phase = 'cleanup';
     this.broadcastPhaseChange();
 
+    // Check for respawned robots (virtual, full health, lives > 0 = just respawned)
+    const respawnedPlayers = this.robots
+      .filter((r) => r.virtual && r.health === GAME.STARTING_HEALTH && r.lives > 0)
+      .map((r) => r.playerId);
+
+    if (respawnedPlayers.length > 0) {
+      await this.waitForDirectionChoices(respawnedPlayers, 'respawn');
+    }
+
     // Small delay before next round
-    await this.delay(1000);
+    if (this.debugMode) {
+      await this.waitForDebugAction();
+    } else {
+      await this.delay(SPEED.ROUND_DELAY_MS / this.executionSpeed);
+    }
     this.startRound();
+  }
+
+  private broadcastDebugStep(
+    globalSteps: { registerIndex: number; step: ExecutionStep; localIndex: number; localTotal: number }[],
+    idx: number,
+  ): void {
+    const entry = globalSteps[idx];
+    const payload: ExecutePayload = {
+      registerIndex: entry.registerIndex,
+      stepIndex: idx,
+      totalSteps: globalSteps.length,
+      stepLabel: entry.step.label,
+      events: entry.step.events,
+      updatedRobots: entry.step.robotsAfter,
+    };
+    this.io.to(this.gameRoom()).emit(EVENTS.GAME_EXECUTE, payload);
+  }
+
+  setSpeed(speed: 1 | 2 | 3): void {
+    this.executionSpeed = speed;
+    const payload: SpeedChangePayload = { speed };
+    this.io.to(this.gameRoom()).emit(EVENTS.GAME_SPEED, payload);
+  }
+
+  setDebugMode(enabled: boolean): void {
+    this.debugMode = enabled;
+    const payload: DebugModePayload = { enabled };
+    this.io.to(this.gameRoom()).emit(EVENTS.GAME_DEBUG_MODE, payload);
+    // If disabling debug mode while waiting for a step, auto-resolve forward
+    if (!enabled && this.debugActionResolve) {
+      this.debugActionResolve('forward');
+      this.debugActionResolve = null;
+    }
+  }
+
+  debugStep(): { error?: string } {
+    if (!this.debugMode) return { error: 'Not in debug mode' };
+    if (!this.debugActionResolve) return { error: 'Not waiting for step' };
+    this.debugActionResolve('forward');
+    this.debugActionResolve = null;
+    return {};
+  }
+
+  debugStepBack(): { error?: string } {
+    if (!this.debugMode) return { error: 'Not in debug mode' };
+    if (!this.debugActionResolve) return { error: 'Not waiting for step' };
+    this.debugActionResolve('back');
+    this.debugActionResolve = null;
+    return {};
+  }
+
+  private waitForDebugAction(): Promise<'forward' | 'back'> {
+    return new Promise<'forward' | 'back'>((resolve) => {
+      this.debugActionResolve = resolve;
+    });
+  }
+
+  chooseDirection(userId: string, direction: Direction): { error?: string } {
+    if (!this.pendingDirectionChoices.has(userId)) {
+      return { error: 'No direction choice pending for you' };
+    }
+
+    const robot = this.robots.find((r) => r.playerId === userId);
+    if (!robot) return { error: 'Robot not found' };
+
+    robot.direction = direction;
+    this.pendingDirectionChoices.delete(userId);
+
+    // If all choices are in, resolve the wait
+    if (this.pendingDirectionChoices.size === 0 && this.directionResolve) {
+      if (this.directionChoiceTimer) {
+        clearTimeout(this.directionChoiceTimer);
+        this.directionChoiceTimer = null;
+      }
+      this.directionResolve();
+      this.directionResolve = null;
+    }
+
+    return {};
+  }
+
+  private waitForDirectionChoices(playerIds: string[], reason: 'initial' | 'respawn'): Promise<void> {
+    for (const id of playerIds) {
+      this.pendingDirectionChoices.add(id);
+    }
+
+    // Emit to clients
+    const payload: DirectionNeededPayload = {
+      playerIds,
+      reason,
+      timeoutSeconds: SPEED.DIRECTION_CHOICE_TIMEOUT_SECONDS,
+    };
+    this.io.to(this.gameRoom()).emit(EVENTS.GAME_DIRECTION_NEEDED, payload);
+
+    // Auto-choose for bots
+    for (const botId of this.botPlayerIds) {
+      if (this.pendingDirectionChoices.has(botId)) {
+        const dirs: Direction[] = ['north', 'east', 'south', 'west'];
+        const robot = this.robots.find((r) => r.playerId === botId);
+        if (robot) {
+          robot.direction = dirs[Math.floor(Math.random() * dirs.length)];
+        }
+        this.pendingDirectionChoices.delete(botId);
+      }
+    }
+
+    // If all already resolved (e.g. all bots), return immediately
+    if (this.pendingDirectionChoices.size === 0) {
+      return Promise.resolve();
+    }
+
+    return new Promise<void>((resolve) => {
+      this.directionResolve = resolve;
+      this.directionChoiceTimer = setTimeout(() => {
+        // Default to north for anyone who didn't choose
+        for (const id of this.pendingDirectionChoices) {
+          const robot = this.robots.find((r) => r.playerId === id);
+          if (robot) robot.direction = 'north';
+        }
+        this.pendingDirectionChoices.clear();
+        this.directionChoiceTimer = null;
+        this.directionResolve = null;
+        resolve();
+      }, SPEED.DIRECTION_CHOICE_TIMEOUT_SECONDS * 1000);
+    });
   }
 
   private delay(ms: number): Promise<void> {
@@ -296,6 +556,9 @@ export class GameInstance {
       totalCheckpoints: this.checkpoints.length,
       checkpoints: this.checkpoints,
       winnerId: this.winnerId,
+      executionSpeed: this.executionSpeed,
+      pendingDirectionChoices: [...this.pendingDirectionChoices],
+      debugMode: this.debugMode,
     };
   }
 
@@ -346,6 +609,10 @@ export class GameInstance {
     if (this.programmingTimer) {
       clearTimeout(this.programmingTimer);
       this.programmingTimer = null;
+    }
+    if (this.directionChoiceTimer) {
+      clearTimeout(this.directionChoiceTimer);
+      this.directionChoiceTimer = null;
     }
   }
 }

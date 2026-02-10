@@ -36,6 +36,13 @@ export const GAME = {
   PROGRAMMING_TIMER_SECONDS: 60,
 } as const;
 
+/** Execution speed configuration */
+export const SPEED = {
+  REGISTER_DELAY_MS: 3000,
+  ROUND_DELAY_MS: 2000,
+  DIRECTION_CHOICE_TIMEOUT_SECONDS: 15,
+} as const;
+
 /** Reputation system constants */
 export const REPUTATION = {
   INITIAL: 100,
@@ -65,6 +72,14 @@ export const EVENTS = {
   GAME_MOVE: 'game:move',
   GAME_PHASE_CHANGE: 'game:phase_change',
   GAME_OVER: 'game:over',
+  GAME_PROGRAMS: 'game:programs',
+  GAME_SPEED: 'game:speed',
+  GAME_CHOOSE_DIRECTION: 'game:choose_direction',
+  GAME_DIRECTION_NEEDED: 'game:direction_needed',
+  GAME_DEBUG_MODE: 'game:debug_mode',
+  GAME_DEBUG_STEP: 'game:debug_step',
+  GAME_DEBUG_STEP_BACK: 'game:debug_step_back',
+  GAME_LEAVE: 'game:leave',
 
   // Chat events
   CHAT_MESSAGE: 'chat:message',

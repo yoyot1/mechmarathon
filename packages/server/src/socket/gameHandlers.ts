@@ -1,6 +1,6 @@
 import type { Server, Socket } from 'socket.io';
 import { EVENTS } from '@mechmarathon/shared';
-import type { GameState, Card } from '@mechmarathon/shared';
+import type { Direction, GameState, Card } from '@mechmarathon/shared';
 import { GameManager } from '../game/GameManager.js';
 
 function gameRoom(gameId: string): string {
@@ -34,9 +34,9 @@ export function registerGameHandlers(io: Server, socket: Socket): void {
     });
   });
 
-  // game:program — Client submits their 5 programmed card IDs
-  socket.on(EVENTS.GAME_PROGRAM, (data: { gameId: string; cardIds: string[] }, ack?: (res: { error?: string }) => void) => {
-    const { gameId, cardIds } = data;
+  // game:program — Client submits their 5 programmed card IDs (+ optional direction)
+  socket.on(EVENTS.GAME_PROGRAM, (data: { gameId: string; cardIds: string[]; direction?: Direction }, ack?: (res: { error?: string }) => void) => {
+    const { gameId, cardIds, direction } = data;
     const game = GameManager.getGame(gameId);
 
     if (!game) {
@@ -44,8 +44,86 @@ export function registerGameHandlers(io: Server, socket: Socket): void {
       return;
     }
 
-    const result = game.submitProgram(userId, cardIds);
+    const result = game.submitProgram(userId, cardIds, direction);
     ack?.(result);
+  });
+
+  // game:speed — Change execution speed
+  socket.on(EVENTS.GAME_SPEED, (data: { gameId: string; speed: number }, ack?: (res: { error?: string }) => void) => {
+    const { gameId, speed } = data;
+    const game = GameManager.getGame(gameId);
+
+    if (!game) {
+      ack?.({ error: 'Game not found' });
+      return;
+    }
+
+    if (speed !== 1 && speed !== 2 && speed !== 3) {
+      ack?.({ error: 'Speed must be 1, 2, or 3' });
+      return;
+    }
+
+    game.setSpeed(speed);
+    ack?.({});
+  });
+
+  // game:choose_direction — Player chooses direction (for respawn)
+  socket.on(EVENTS.GAME_CHOOSE_DIRECTION, (data: { gameId: string; direction: Direction }, ack?: (res: { error?: string }) => void) => {
+    const { gameId, direction } = data;
+    const game = GameManager.getGame(gameId);
+
+    if (!game) {
+      ack?.({ error: 'Game not found' });
+      return;
+    }
+
+    const validDirs: Direction[] = ['north', 'east', 'south', 'west'];
+    if (!validDirs.includes(direction)) {
+      ack?.({ error: 'Invalid direction' });
+      return;
+    }
+
+    const result = game.chooseDirection(userId, direction);
+    ack?.(result);
+  });
+
+  // game:debug_mode — Toggle debug/step-through mode
+  socket.on(EVENTS.GAME_DEBUG_MODE, (data: { gameId: string; enabled: boolean }, ack?: (res: { error?: string }) => void) => {
+    const { gameId, enabled } = data;
+    const game = GameManager.getGame(gameId);
+    if (!game) { ack?.({ error: 'Game not found' }); return; }
+    game.setDebugMode(enabled);
+    ack?.({});
+  });
+
+  // game:debug_step — Advance one step in debug mode
+  socket.on(EVENTS.GAME_DEBUG_STEP, (data: { gameId: string }, ack?: (res: { error?: string }) => void) => {
+    const { gameId } = data;
+    const game = GameManager.getGame(gameId);
+    if (!game) { ack?.({ error: 'Game not found' }); return; }
+    const result = game.debugStep();
+    ack?.(result);
+  });
+
+  // game:debug_step_back — Go back one step in debug mode
+  socket.on(EVENTS.GAME_DEBUG_STEP_BACK, (data: { gameId: string }, ack?: (res: { error?: string }) => void) => {
+    const { gameId } = data;
+    const game = GameManager.getGame(gameId);
+    if (!game) { ack?.({ error: 'Game not found' }); return; }
+    const result = game.debugStepBack();
+    ack?.(result);
+  });
+
+  // game:leave — Player leaves the game
+  socket.on(EVENTS.GAME_LEAVE, (data: { gameId: string }, ack?: (res: { error?: string }) => void) => {
+    const { gameId } = data;
+    socket.leave(gameRoom(gameId));
+    // Clean up the game if needed
+    const game = GameManager.getGame(gameId);
+    if (game) {
+      game.handleDisconnect(userId);
+    }
+    ack?.({});
   });
 
   // Handle disconnect — mark player as disconnected in their game

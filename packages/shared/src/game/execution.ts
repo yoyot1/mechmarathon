@@ -1,5 +1,5 @@
 import type {
-  Board, Card, CheckpointConfig, Direction, ExecutionEvent, Position, Robot,
+  Board, Card, CheckpointConfig, Direction, ExecutionEvent, ExecutionStep, Position, Robot,
 } from '../types/game.js';
 import {
   directionDelta, getTile, isInBounds, isPit, isWallBlocking, oppositeDirection, rotateDirection,
@@ -283,6 +283,7 @@ export function processCheckpoints(
     const cp = checkpoints.find((c) => c.number === nextCheckpoint);
     if (cp && posEqual(robot.position, cp.position)) {
       robot.checkpoint = nextCheckpoint;
+      robot.archivePosition = { ...cp.position };
       events.push({
         type: 'checkpoint',
         robotId: robot.id,
@@ -304,6 +305,7 @@ export function processRepair(robots: Robot[], board: Board): ExecutionEvent[] {
     const tile = getTile(board, robot.position);
     if (tile?.type === 'repair') {
       robot.health = Math.min(robot.health + 1, 10);
+      robot.archivePosition = { ...robot.position };
       events.push({ type: 'repair', robotId: robot.id, to: robot.position });
     }
   }
@@ -311,17 +313,14 @@ export function processRepair(robots: Robot[], board: Board): ExecutionEvent[] {
   return events;
 }
 
-/** Handle robot death: respawn at checkpoint 1 position */
-export function handleRobotDeath(
-  robot: Robot,
-  respawnPosition: Position,
-): ExecutionEvent[] {
+/** Handle robot death: respawn at archive position (last checkpoint or repair site) */
+export function handleRobotDeath(robot: Robot): ExecutionEvent[] {
   if (robot.lives <= 0) return [];
-  robot.position = { ...respawnPosition };
+  robot.position = { ...robot.archivePosition };
   robot.direction = 'north';
   robot.health = 10;
   robot.virtual = true;
-  return [{ type: 'respawn', robotId: robot.id, to: respawnPosition }];
+  return [{ type: 'respawn', robotId: robot.id, to: { ...robot.archivePosition } }];
 }
 
 // --- Register execution ---
@@ -333,7 +332,6 @@ export function executeRegister(
   robots: Robot[],
   board: Board,
   checkpoints: CheckpointConfig[],
-  respawnPosition: Position,
 ): ExecutionEvent[] {
   const events: ExecutionEvent[] = [];
 
@@ -352,23 +350,116 @@ export function executeRegister(
     events.push(...executeCard(entry.card, entry.robot, robots, board));
   }
 
+  // Checkpoints and repair (before board elements so landing on a checkpoint
+  // on a conveyor credits the checkpoint before the conveyor moves the robot)
+  events.push(...processCheckpoints(robots, checkpoints));
+  events.push(...processRepair(robots, board));
+
   // Board elements: express conveyors, then all conveyors, then gears
   events.push(...processExpressConveyors(robots, board));
   events.push(...processAllConveyors(robots, board));
   events.push(...processGears(robots, board));
 
-  // Checkpoints and repair
-  events.push(...processCheckpoints(robots, checkpoints));
-  events.push(...processRepair(robots, board));
-
   // Respawn dead robots (those who died this register but still have lives)
   for (const robot of robots) {
     if (robot.health <= 0 && robot.lives > 0) {
-      events.push(...handleRobotDeath(robot, respawnPosition));
+      events.push(...handleRobotDeath(robot));
     }
   }
 
   return events;
+}
+
+/** Card type to readable label */
+const CARD_TYPE_LABELS: Record<string, string> = {
+  move1: 'Move 1', move2: 'Move 2', move3: 'Move 3',
+  backup: 'Backup', turn_left: 'Turn Left', turn_right: 'Turn Right', u_turn: 'U-Turn',
+};
+
+/** Deep-copy robots array (for snapshots) */
+function snapshotRobots(robots: Robot[]): Robot[] {
+  return robots.map((r) => ({
+    ...r,
+    position: { ...r.position },
+    archivePosition: { ...r.archivePosition },
+  }));
+}
+
+/** Execute a register broken into granular sub-steps with robot snapshots after each */
+export function executeRegisterSteps(
+  registerIndex: number,
+  playerCards: Map<string, Card>,
+  robots: Robot[],
+  board: Board,
+  checkpoints: CheckpointConfig[],
+): ExecutionStep[] {
+  const steps: ExecutionStep[] = [];
+
+  // Sort cards by priority (highest first)
+  const entries = [...playerCards.entries()]
+    .map(([playerId, card]) => ({
+      playerId,
+      card,
+      robot: robots.find((r) => r.playerId === playerId)!,
+    }))
+    .filter((e) => e.robot && e.robot.lives > 0)
+    .sort((a, b) => b.card.priority - a.card.priority);
+
+  // Execute each player's card individually
+  for (const entry of entries) {
+    const events = executeCard(entry.card, entry.robot, robots, board);
+    if (events.length > 0) {
+      const label = CARD_TYPE_LABELS[entry.card.type] ?? entry.card.type;
+      steps.push({
+        label: `${label} (P:${entry.card.priority})`,
+        events,
+        robotsAfter: snapshotRobots(robots),
+      });
+    }
+  }
+
+  // Checkpoints (before board elements)
+  const cpEvents = processCheckpoints(robots, checkpoints);
+  if (cpEvents.length > 0) {
+    steps.push({ label: 'Checkpoints', events: cpEvents, robotsAfter: snapshotRobots(robots) });
+  }
+
+  // Repair
+  const repairEvents = processRepair(robots, board);
+  if (repairEvents.length > 0) {
+    steps.push({ label: 'Repair', events: repairEvents, robotsAfter: snapshotRobots(robots) });
+  }
+
+  // Express conveyors
+  const ecEvents = processExpressConveyors(robots, board);
+  if (ecEvents.length > 0) {
+    steps.push({ label: 'Express Conveyors', events: ecEvents, robotsAfter: snapshotRobots(robots) });
+  }
+
+  // All conveyors
+  const acEvents = processAllConveyors(robots, board);
+  if (acEvents.length > 0) {
+    steps.push({ label: 'All Conveyors', events: acEvents, robotsAfter: snapshotRobots(robots) });
+  }
+
+  // Gears
+  const gearEvents = processGears(robots, board);
+  if (gearEvents.length > 0) {
+    steps.push({ label: 'Gears', events: gearEvents, robotsAfter: snapshotRobots(robots) });
+  }
+
+  // Respawn dead robots
+  const respawnEvents: ExecutionEvent[] = [];
+  for (const robot of robots) {
+    if (robot.health <= 0 && robot.lives > 0) {
+      respawnEvents.push(...handleRobotDeath(robot));
+    }
+  }
+  if (respawnEvents.length > 0) {
+    steps.push({ label: 'Respawn', events: respawnEvents, robotsAfter: snapshotRobots(robots) });
+  }
+
+  return steps;
 }
 
 /** Check if any robot has reached all checkpoints */

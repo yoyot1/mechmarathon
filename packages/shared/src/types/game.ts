@@ -35,6 +35,8 @@ export interface Robot {
   checkpoint: number;
   /** True when the robot is virtual (non-colliding) — first turn or stacked */
   virtual: boolean;
+  /** Last checkpoint or repair site — used as respawn location */
+  archivePosition: Position;
 }
 
 /** Board tile types */
@@ -108,6 +110,9 @@ export interface GameState {
   totalCheckpoints: number;
   checkpoints: CheckpointConfig[];
   winnerId: string | null;
+  executionSpeed: 1 | 2 | 3;
+  pendingDirectionChoices: string[];
+  debugMode: boolean;
 }
 
 /** Types of events that occur during execution */
@@ -138,9 +143,19 @@ export interface CardsDealtPayload {
   timerSeconds: number;
 }
 
-/** Payload sent for each register execution */
+/** A single sub-step within register execution (one card or one board element phase) */
+export interface ExecutionStep {
+  label: string;
+  events: ExecutionEvent[];
+  robotsAfter: Robot[];
+}
+
+/** Payload sent for each register execution (or each sub-step in debug mode) */
 export interface ExecutePayload {
   registerIndex: number;
+  stepIndex: number;
+  totalSteps: number;
+  stepLabel: string;
   events: ExecutionEvent[];
   updatedRobots: Robot[];
 }
@@ -156,4 +171,32 @@ export interface PhaseChangePayload {
 export interface GameOverPayload {
   winnerId: string;
   finalState: GameState;
+}
+
+/** Payload sent at execution start with all players' programs */
+export interface ProgramsPayload {
+  programs: Record<string, Card[]>;
+}
+
+/** Payload for speed change */
+export interface SpeedChangePayload {
+  speed: 1 | 2 | 3;
+}
+
+/** Payload when server requests direction choices */
+export interface DirectionNeededPayload {
+  playerIds: string[];
+  reason: 'initial' | 'respawn';
+  timeoutSeconds: number;
+}
+
+/** Payload when client submits direction choice */
+export interface ChooseDirectionPayload {
+  gameId: string;
+  direction: Direction;
+}
+
+/** Payload for debug mode toggle */
+export interface DebugModePayload {
+  enabled: boolean;
 }

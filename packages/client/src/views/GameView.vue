@@ -4,7 +4,8 @@ import { useRoute, useRouter } from 'vue-router';
 import { useGameStore } from '../stores/game';
 import { useAuthStore } from '../stores/auth';
 import { connectSocket } from '../lib/socket';
-import type { Card, Direction, ExecutionEvent, Robot, Tile, CheckpointConfig } from '@mechmarathon/shared';
+import BoardCanvas from '../components/BoardCanvas.vue';
+import type { Card, Direction, ExecutionEvent, Robot } from '@mechmarathon/shared';
 import { GAME, ROBOT_COLORS } from '@mechmarathon/shared';
 
 const route = useRoute();
@@ -14,57 +15,6 @@ const auth = useAuthStore();
 
 const gameId = computed(() => route.params.id as string);
 
-const myRobot = computed(() =>
-  game.gameState?.robots.find((r) => r.playerId === auth.user?.id),
-);
-
-const boardTiles = computed(() => game.gameState?.board.tiles ?? []);
-const boardWidth = computed(() => game.gameState?.board.width ?? 16);
-const checkpoints = computed(() => game.gameState?.checkpoints ?? []);
-
-function tileClass(tile: Tile): string {
-  return `tile tile-${tile.type}`;
-}
-
-function tileSymbol(tile: Tile): string {
-  if (tile.type === 'gear_cw') return '\u21BB';
-  if (tile.type === 'gear_ccw') return '\u21BA';
-  if (tile.type === 'repair') return '+';
-  if (tile.type === 'laser') return '\u26A1';
-  if (tile.type === 'pit') return '\u2716';
-  if (!tile.direction) return '';
-  if (tile.type === 'express_conveyor') {
-    const doubleArrows: Record<string, string> = { north: '\u21C8', south: '\u21CA', east: '\u21C9', west: '\u21C7' };
-    return doubleArrows[tile.direction] ?? '';
-  }
-  if (tile.type === 'conveyor') {
-    const arrows: Record<string, string> = { north: '\u2191', south: '\u2193', east: '\u2192', west: '\u2190' };
-    return arrows[tile.direction] ?? '';
-  }
-  return '';
-}
-
-function robotsAt(x: number, y: number): Robot[] {
-  if (!game.gameState) return [];
-  return game.gameState.robots.filter(
-    (r) => r.lives > 0 && r.position.x === x && r.position.y === y,
-  );
-}
-
-function checkpointAt(x: number, y: number): CheckpointConfig | undefined {
-  return checkpoints.value.find((c) => c.position.x === x && c.position.y === y);
-}
-
-function robotColor(robot: Robot): string {
-  const idx = game.gameState?.robots.indexOf(robot) ?? 0;
-  return ROBOT_COLORS[idx % ROBOT_COLORS.length];
-}
-
-function directionArrow(dir: string): string {
-  const arrows: Record<string, string> = { north: '\u25B2', south: '\u25BC', east: '\u25B6', west: '\u25C0' };
-  return arrows[dir] ?? '';
-}
-
 function cardLabel(card: Card): string {
   const labels: Record<string, string> = {
     move1: 'Move 1', move2: 'Move 2', move3: 'Move 3',
@@ -73,30 +23,20 @@ function cardLabel(card: Card): string {
   return labels[card.type] ?? card.type;
 }
 
-function wallClasses(tile: Tile): string[] {
-  if (!tile.walls?.length) return [];
-  return tile.walls.map((w) => `wall-${w}`);
-}
-
 // --- Execution UI helpers ---
 
 const programPlayerIds = computed(() => Object.keys(game.allPrograms));
+
+function robotColor(robot: Robot): string {
+  const idx = game.gameState?.robots.indexOf(robot) ?? 0;
+  return ROBOT_COLORS[idx % ROBOT_COLORS.length];
+}
 
 function robotColorByPlayerId(playerId: string): string {
   const robot = game.gameState?.robots.find((r) => r.playerId === playerId);
   if (!robot) return '#666';
   return robotColor(robot);
 }
-
-const activeRobotIds = computed(() => {
-  const ids = new Set<string>();
-  for (const ev of game.currentRegisterEvents) {
-    if (ev.type === 'move' || ev.type === 'rotate' || ev.type === 'push') {
-      ids.add(ev.robotId);
-    }
-  }
-  return ids;
-});
 
 const robotMoveEvents = computed(() =>
   game.currentRegisterEvents.filter(
@@ -306,40 +246,7 @@ onUnmounted(() => {
 
     <!-- Board + Legend sidebar -->
     <div class="board-area" v-if="game.gameState">
-      <div class="board-wrapper">
-        <div
-          class="board-grid"
-          :style="{ gridTemplateColumns: `repeat(${boardWidth}, 40px)` }"
-        >
-          <div
-            v-for="(row, y) in boardTiles"
-            v-bind:key="y"
-            style="display: contents"
-          >
-            <div
-              v-for="(tile, x) in row"
-              v-bind:key="`${x}-${y}`"
-              :class="[tileClass(tile), ...wallClasses(tile)]"
-            >
-              <span v-if="tileSymbol(tile)" class="tile-arrow">{{ tileSymbol(tile) }}</span>
-              <span v-if="checkpointAt(x, y)" class="checkpoint-overlay">
-                {{ checkpointAt(x, y)!.number }}
-              </span>
-              <div
-                v-for="robot in robotsAt(x, y)"
-                :key="robot.id"
-                class="robot"
-                :class="{ virtual: robot.virtual, mine: robot.playerId === auth.user?.id, active: game.isExecuting && activeRobotIds.has(robot.id) }"
-                :style="{ backgroundColor: robotColor(robot) }"
-                :title="`${robot.playerId} HP:${robot.health} Lives:${robot.lives} CP:${robot.checkpoint}`"
-              >
-                {{ directionArrow(robot.direction) }}
-                <span v-if="robot.playerId === auth.user?.id" class="robot-you">YOU</span>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
+      <BoardCanvas />
 
       <!-- Legend sidebar -->
       <div class="legend-sidebar">
@@ -604,32 +511,8 @@ onUnmounted(() => {
   overflow: auto;
 }
 
-.board-wrapper {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 1rem;
-  overflow: auto;
-}
-
-.board-grid {
-  display: grid;
-  gap: 1px;
-  background: #222;
-  border: 2px solid #444;
-}
-
-.tile {
-  width: 40px;
-  height: 40px;
-  position: relative;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 10px;
-}
-
+/* Legend tile swatches (reuse tile-type colors) */
+.tile { position: relative; }
 .tile-floor { background: #2a2a3e; }
 .tile-pit { background: #0a0a0a; }
 .tile-conveyor { background: #1a3a1a; }
@@ -641,73 +524,7 @@ onUnmounted(() => {
 .tile-checkpoint { background: #3a3a1a; }
 .tile-spawn { background: #2a2a3e; }
 .tile-laser { background: #3a1a1a; }
-
-/* Walls */
-.wall-north { border-top: 3px solid #ff8800; }
 .wall-south { border-bottom: 3px solid #ff8800; }
-.wall-east { border-right: 3px solid #ff8800; }
-.wall-west { border-left: 3px solid #ff8800; }
-
-.tile-arrow {
-  position: absolute;
-  font-size: 14px;
-  opacity: 0.4;
-  pointer-events: none;
-}
-
-.checkpoint-overlay {
-  position: absolute;
-  top: 1px;
-  right: 2px;
-  font-size: 9px;
-  font-weight: bold;
-  color: #ffd700;
-  background: rgba(0,0,0,0.6);
-  border-radius: 50%;
-  width: 14px;
-  height: 14px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.robot {
-  width: 24px;
-  height: 24px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 10px;
-  color: white;
-  z-index: 10;
-  position: absolute;
-  border: 2px solid rgba(255,255,255,0.3);
-}
-
-.robot.virtual {
-  opacity: 0.5;
-  border-style: dashed;
-}
-
-.robot.mine {
-  border-color: #ffd700;
-  border-width: 2px;
-}
-
-.robot-you {
-  position: absolute;
-  bottom: -10px;
-  left: 50%;
-  transform: translateX(-50%);
-  font-size: 6px;
-  font-weight: 800;
-  color: #ffd700;
-  text-shadow: 0 0 2px rgba(0,0,0,0.9);
-  letter-spacing: 0.5px;
-  pointer-events: none;
-  white-space: nowrap;
-}
 
 .you-badge {
   font-size: 0.65rem;
@@ -864,16 +681,6 @@ onUnmounted(() => {
   background: #333;
   padding: 0.1rem 0.3rem;
   border-radius: 0.2rem;
-}
-
-/* Active robot glow */
-.robot.active {
-  animation: pulse-glow 0.8s ease-in-out infinite alternate;
-}
-
-@keyframes pulse-glow {
-  from { box-shadow: 0 0 4px 1px rgba(255, 255, 255, 0.3); }
-  to { box-shadow: 0 0 10px 4px rgba(255, 255, 255, 0.6); }
 }
 
 /* Programs grid */

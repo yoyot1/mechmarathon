@@ -128,6 +128,6 @@ pnpm --filter @mechmarathon/server add <package>
 - [x] ~~Implement lobby CRUD + Socket.IO lobby events~~ — Done (REST: POST/GET /api/lobbies, Socket: join/leave/ready/start, Pinia store, LobbyListView + LobbyView)
 - [x] ~~Implement core game engine (card dealing, programming, execution)~~ — Done (shared game logic, GameInstance, GameManager, socket handlers, Pinia store, CSS grid board view)
 - [x] ~~Build card programming UI~~ — Done (register slots, hand cards, submit, timer, integrated into GameView)
-- [ ] Build PixiJS board renderer (currently CSS grid — functional but minimal)
+- [x] ~~Build PixiJS board renderer~~ — Done (TileLayer, RobotLayer, AnimationQueue, BoardCanvas.vue; replaces CSS grid with animated PixiJS canvas)
 - [ ] Add unit tests for shared game logic
 - [ ] Implement reputation updates on game completion

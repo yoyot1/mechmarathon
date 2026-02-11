@@ -226,7 +226,9 @@ export const useGameStore = defineStore('game', () => {
       debugTotalSteps.value = 0;
       debugStepLabel.value = '';
       chosenDirection.value = null;
-      // Don't reset needsDirectionChoice here — GAME_DIRECTION_NEEDED will set it
+      // Reset direction state — only re-set if GAME_DIRECTION_NEEDED arrives
+      needsDirectionChoice.value = false;
+      pendingDirectionPlayerIds.value = [];
       startTimer(payload.timerSeconds);
     });
 

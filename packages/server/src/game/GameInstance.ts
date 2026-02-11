@@ -4,9 +4,10 @@ import {
   type ExecutePayload, type ExecutionStep, type GameOverPayload,
   type GamePhase, type GameState, type PhaseChangePayload, type ProgramsPayload, type Robot,
   type SpeedChangePayload, type DebugModePayload,
+  type ExecutionEvent,
   EVENTS, GAME, SPEED, ROBOT_COLORS,
   createDeck, shuffleDeck, dealCards, executeRegisterSteps, checkWinCondition, updateVirtualStatus,
-  processCheckpoints,
+  processCheckpoints, handleRobotDeath,
   DEFAULT_BOARD, getDefaultCheckpoints,
 } from '@mechmarathon/shared';
 
@@ -267,7 +268,6 @@ export class GameInstance {
     interface RegisterResult {
       registerIndex: number;
       steps: ExecutionStep[];
-      winnerId: string | null;
     }
 
     const allRegisters: RegisterResult[] = [];
@@ -275,7 +275,7 @@ export class GameInstance {
     for (let reg = 0; reg < GAME.REGISTERS_PER_ROUND; reg++) {
       const playerCards = new Map<string, Card>();
       for (const robot of this.robots) {
-        if (robot.lives <= 0) continue;
+        if (robot.lives <= 0 || robot.health <= 0) continue;
         const program = this.programs.get(robot.playerId);
         if (!program) continue;
         const card = program[reg];
@@ -284,12 +284,26 @@ export class GameInstance {
 
       const steps = executeRegisterSteps(reg, playerCards, this.robots, this.board, this.checkpoints);
       updateVirtualStatus(this.robots);
-
-      const winner = checkWinCondition(this.robots, this.checkpoints.length);
-      allRegisters.push({ registerIndex: reg, steps, winnerId: winner });
-
-      if (winner) break;
+      allRegisters.push({ registerIndex: reg, steps });
     }
+
+    // After all registers: check the final checkpoint.
+    // Credit it if a robot is standing on it (no archive update for the final flag).
+    const maxCp = this.checkpoints.length > 0
+      ? Math.max(...this.checkpoints.map((c) => c.number))
+      : 0;
+    for (const robot of this.robots) {
+      if (robot.lives <= 0 || robot.health <= 0) continue;
+      const nextCp = robot.checkpoint + 1;
+      if (nextCp !== maxCp) continue;
+      const cp = this.checkpoints.find((c) => c.number === nextCp);
+      if (cp && robot.position.x === cp.position.x && robot.position.y === cp.position.y) {
+        robot.checkpoint = nextCp;
+        // No archive update for the final flag
+      }
+    }
+
+    const winnerId = checkWinCondition(this.robots, this.checkpoints.length);
 
     if (this.debugMode) {
       // Build a flat list of all steps across all registers for navigation
@@ -327,7 +341,8 @@ export class GameInstance {
       }
     } else {
       // Non-debug: broadcast each register's events as a single payload with animation delays
-      for (const reg of allRegisters) {
+      for (let i = 0; i < allRegisters.length; i++) {
+        const reg = allRegisters[i];
         const allEvents = reg.steps.flatMap((s) => s.events);
         const robotsAfter = reg.steps.length > 0
           ? reg.steps[reg.steps.length - 1].robotsAfter
@@ -343,30 +358,18 @@ export class GameInstance {
         };
         this.io.to(this.gameRoom()).emit(EVENTS.GAME_EXECUTE, payload);
 
-        if (reg.winnerId) {
-          this.winnerId = reg.winnerId;
-          this.phase = 'finished';
-          const gameOverPayload: GameOverPayload = {
-            winnerId: reg.winnerId,
-            finalState: this.toGameState(),
-          };
-          this.io.to(this.gameRoom()).emit(EVENTS.GAME_OVER, gameOverPayload);
-          return;
-        }
-
-        if (reg.registerIndex < allRegisters[allRegisters.length - 1].registerIndex) {
+        if (i < allRegisters.length - 1) {
           await this.delay(SPEED.REGISTER_DELAY_MS / this.executionSpeed);
         }
       }
     }
 
-    // Check for win from last register
-    const lastReg = allRegisters[allRegisters.length - 1];
-    if (lastReg.winnerId) {
-      this.winnerId = lastReg.winnerId;
+    // Check win after full turn
+    if (winnerId) {
+      this.winnerId = winnerId;
       this.phase = 'finished';
       const gameOverPayload: GameOverPayload = {
-        winnerId: lastReg.winnerId,
+        winnerId,
         finalState: this.toGameState(),
       };
       this.io.to(this.gameRoom()).emit(EVENTS.GAME_OVER, gameOverPayload);
@@ -377,10 +380,27 @@ export class GameInstance {
     this.phase = 'cleanup';
     this.broadcastPhaseChange();
 
-    // Check for respawned robots (virtual, full health, lives > 0 = just respawned)
-    const respawnedPlayers = this.robots
-      .filter((r) => r.virtual && r.health === GAME.STARTING_HEALTH && r.lives > 0)
-      .map((r) => r.playerId);
+    // Respawn dead robots (those who died during this round but have lives left)
+    const respawnEvents: ExecutionEvent[] = [];
+    const respawnedPlayers: string[] = [];
+    for (const robot of this.robots) {
+      if (robot.health <= 0 && robot.lives > 0) {
+        respawnEvents.push(...handleRobotDeath(robot));
+        respawnedPlayers.push(robot.playerId);
+      }
+    }
+
+    if (respawnEvents.length > 0) {
+      const respawnPayload: ExecutePayload = {
+        registerIndex: -1,
+        stepIndex: -1,
+        totalSteps: -1,
+        stepLabel: 'Respawn',
+        events: respawnEvents,
+        updatedRobots: this.robots.map((r) => ({ ...r, position: { ...r.position } })),
+      };
+      this.io.to(this.gameRoom()).emit(EVENTS.GAME_EXECUTE, respawnPayload);
+    }
 
     if (respawnedPlayers.length > 0) {
       await this.waitForDirectionChoices(respawnedPlayers, 'respawn');

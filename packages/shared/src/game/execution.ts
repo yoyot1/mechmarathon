@@ -11,9 +11,13 @@ function posEqual(a: Position, b: Position): boolean {
   return a.x === b.x && a.y === b.y;
 }
 
+function isAlive(robot: Robot): boolean {
+  return robot.lives > 0 && robot.health > 0;
+}
+
 function findRobotAt(robots: Robot[], pos: Position, excludeId?: string): Robot | undefined {
   return robots.find(
-    (r) => r.lives > 0 && posEqual(r.position, pos) && r.id !== excludeId,
+    (r) => isAlive(r) && posEqual(r.position, pos) && r.id !== excludeId,
   );
 }
 
@@ -26,7 +30,7 @@ export function executeCard(
   robots: Robot[],
   board: Board,
 ): ExecutionEvent[] {
-  if (robot.lives <= 0) return [];
+  if (!isAlive(robot)) return [];
 
   switch (card.type) {
     case 'move1': return moveRobot(robot, 1, robots, board);
@@ -65,7 +69,7 @@ export function moveRobot(
     const stepEvents = moveOneStep(robot, direction, robots, board);
     events.push(...stepEvents);
     // If the robot died (fell in pit / off board), stop
-    if (robot.lives <= 0) break;
+    if (!isAlive(robot)) break;
   }
 
   return events;
@@ -192,7 +196,7 @@ function processConveyorType(
   const moves = new Map<string, { robot: Robot; from: Position; to: Position }>();
 
   for (const robot of robots) {
-    if (robot.lives <= 0) continue;
+    if (!isAlive(robot)) continue;
     const tile = getTile(board, robot.position);
     if (!tile || !tile.direction) continue;
     if (type === 'express_conveyor' && tile.type !== 'express_conveyor') continue;
@@ -254,7 +258,7 @@ export function processGears(robots: Robot[], board: Board): ExecutionEvent[] {
   const events: ExecutionEvent[] = [];
 
   for (const robot of robots) {
-    if (robot.lives <= 0) continue;
+    if (!isAlive(robot)) continue;
     const tile = getTile(board, robot.position);
     if (!tile) continue;
 
@@ -270,16 +274,21 @@ export function processGears(robots: Robot[], board: Board): ExecutionEvent[] {
   return events;
 }
 
-/** Process checkpoints — increment robot.checkpoint when landing on next sequential one */
+/** Process checkpoints — increment robot.checkpoint when landing on next sequential one.
+ *  When excludeFinal is true, the highest-numbered checkpoint is skipped
+ *  (it should only be credited after all board elements have executed). */
 export function processCheckpoints(
   robots: Robot[],
   checkpoints: CheckpointConfig[],
+  excludeFinal = false,
 ): ExecutionEvent[] {
   const events: ExecutionEvent[] = [];
+  const maxCp = checkpoints.length > 0 ? Math.max(...checkpoints.map((c) => c.number)) : 0;
 
   for (const robot of robots) {
-    if (robot.lives <= 0) continue;
+    if (!isAlive(robot)) continue;
     const nextCheckpoint = robot.checkpoint + 1;
+    if (excludeFinal && nextCheckpoint === maxCp) continue;
     const cp = checkpoints.find((c) => c.number === nextCheckpoint);
     if (cp && posEqual(robot.position, cp.position)) {
       robot.checkpoint = nextCheckpoint;
@@ -301,7 +310,7 @@ export function processRepair(robots: Robot[], board: Board): ExecutionEvent[] {
   const events: ExecutionEvent[] = [];
 
   for (const robot of robots) {
-    if (robot.lives <= 0) continue;
+    if (!isAlive(robot)) continue;
     const tile = getTile(board, robot.position);
     if (tile?.type === 'repair') {
       robot.health = Math.min(robot.health + 1, 10);
@@ -342,7 +351,7 @@ export function executeRegister(
       card,
       robot: robots.find((r) => r.playerId === playerId)!,
     }))
-    .filter((e) => e.robot && e.robot.lives > 0)
+    .filter((e) => e.robot && isAlive(e.robot))
     .sort((a, b) => b.card.priority - a.card.priority);
 
   // Execute each player's card in priority order
@@ -350,22 +359,18 @@ export function executeRegister(
     events.push(...executeCard(entry.card, entry.robot, robots, board));
   }
 
-  // Checkpoints and repair (before board elements so landing on a checkpoint
-  // on a conveyor credits the checkpoint before the conveyor moves the robot)
-  events.push(...processCheckpoints(robots, checkpoints));
-  events.push(...processRepair(robots, board));
-
   // Board elements: express conveyors, then all conveyors, then gears
   events.push(...processExpressConveyors(robots, board));
   events.push(...processAllConveyors(robots, board));
   events.push(...processGears(robots, board));
 
-  // Respawn dead robots (those who died this register but still have lives)
-  for (const robot of robots) {
-    if (robot.health <= 0 && robot.lives > 0) {
-      events.push(...handleRobotDeath(robot));
-    }
-  }
+  // Intermediate checkpoints (after board elements, excludes the final flag —
+  // the final flag only counts at the end of the full turn)
+  events.push(...processCheckpoints(robots, checkpoints, true));
+  events.push(...processRepair(robots, board));
+
+  // NOTE: Respawn is NOT handled here. Dead robots are out for the rest of the
+  // round and respawn during the cleanup phase in GameInstance.
 
   return events;
 }
@@ -402,7 +407,7 @@ export function executeRegisterSteps(
       card,
       robot: robots.find((r) => r.playerId === playerId)!,
     }))
-    .filter((e) => e.robot && e.robot.lives > 0)
+    .filter((e) => e.robot && isAlive(e.robot))
     .sort((a, b) => b.card.priority - a.card.priority);
 
   // Execute each player's card individually
@@ -416,18 +421,6 @@ export function executeRegisterSteps(
         robotsAfter: snapshotRobots(robots),
       });
     }
-  }
-
-  // Checkpoints (before board elements)
-  const cpEvents = processCheckpoints(robots, checkpoints);
-  if (cpEvents.length > 0) {
-    steps.push({ label: 'Checkpoints', events: cpEvents, robotsAfter: snapshotRobots(robots) });
-  }
-
-  // Repair
-  const repairEvents = processRepair(robots, board);
-  if (repairEvents.length > 0) {
-    steps.push({ label: 'Repair', events: repairEvents, robotsAfter: snapshotRobots(robots) });
   }
 
   // Express conveyors
@@ -448,16 +441,21 @@ export function executeRegisterSteps(
     steps.push({ label: 'Gears', events: gearEvents, robotsAfter: snapshotRobots(robots) });
   }
 
-  // Respawn dead robots
-  const respawnEvents: ExecutionEvent[] = [];
-  for (const robot of robots) {
-    if (robot.health <= 0 && robot.lives > 0) {
-      respawnEvents.push(...handleRobotDeath(robot));
-    }
+  // Intermediate checkpoints (after board elements, excludes the final flag —
+  // the final flag only counts at the end of the full turn)
+  const cpEvents = processCheckpoints(robots, checkpoints, true);
+  if (cpEvents.length > 0) {
+    steps.push({ label: 'Checkpoints', events: cpEvents, robotsAfter: snapshotRobots(robots) });
   }
-  if (respawnEvents.length > 0) {
-    steps.push({ label: 'Respawn', events: respawnEvents, robotsAfter: snapshotRobots(robots) });
+
+  // Repair
+  const repairEvents = processRepair(robots, board);
+  if (repairEvents.length > 0) {
+    steps.push({ label: 'Repair', events: repairEvents, robotsAfter: snapshotRobots(robots) });
   }
+
+  // NOTE: Respawn is NOT handled here. Dead robots are out for the rest of the
+  // round and respawn during the cleanup phase in GameInstance.
 
   return steps;
 }
@@ -475,11 +473,11 @@ export function checkWinCondition(robots: Robot[], totalCheckpoints: number): st
 /** Update virtual status: robots are non-virtual if no other robot is on the same position */
 export function updateVirtualStatus(robots: Robot[]): void {
   for (const robot of robots) {
-    if (robot.lives <= 0 || !robot.virtual) continue;
+    if (!isAlive(robot) || !robot.virtual) continue;
     const stacked = robots.some(
       (other) =>
         other.id !== robot.id &&
-        other.lives > 0 &&
+        isAlive(other) &&
         posEqual(other.position, robot.position),
     );
     if (!stacked) {

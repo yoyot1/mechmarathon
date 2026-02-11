@@ -62,7 +62,7 @@ export const DEFAULT_BOARD: BoardDefinition = (() => {
 export function getDefaultCheckpoints(): CheckpointConfig[] {
   return [
     { position: { x: 7, y: 13 }, number: 1 },  // south-center — robots start here
-    { position: { x: 8, y: 7 }, number: 2 },    // center
+    { position: { x: 7, y: 7 }, number: 2 },    // center (off the express conveyor)
     { position: { x: 7, y: 2 }, number: 3 },    // north-center
   ];
 }

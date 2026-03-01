@@ -113,6 +113,7 @@ export interface GameState {
   executionSpeed: 1 | 2 | 3;
   pendingDirectionChoices: string[];
   debugMode: boolean;
+  timerSeconds?: number;
 }
 
 /** Types of events that occur during execution */

@@ -32,6 +32,7 @@ export class GameInstance {
   private programs = new Map<string, (Card | null)[]>();
   private disconnectedPlayers = new Set<string>();
   private programmingTimer: ReturnType<typeof setTimeout> | null = null;
+  private programmingTimerStart: number = 0;
   private botPlayerIds = new Set<string>();
   private executionSpeed: 1 | 2 | 3 = 1;
   private pendingDirectionChoices = new Set<string>();
@@ -150,6 +151,7 @@ export class GameInstance {
     }
 
     // Start programming timer
+    this.programmingTimerStart = Date.now();
     this.programmingTimer = setTimeout(() => {
       this.onProgrammingTimerExpired();
     }, GAME.PROGRAMMING_TIMER_SECONDS * 1000);
@@ -579,6 +581,9 @@ export class GameInstance {
       executionSpeed: this.executionSpeed,
       pendingDirectionChoices: [...this.pendingDirectionChoices],
       debugMode: this.debugMode,
+      timerSeconds: this.phase === 'programming' && this.programmingTimer
+        ? Math.max(0, Math.ceil(GAME.PROGRAMMING_TIMER_SECONDS - (Date.now() - this.programmingTimerStart) / 1000))
+        : undefined,
     };
   }
 

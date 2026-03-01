@@ -132,6 +132,21 @@ function handleLeave(): void {
 // --- Board legend ---
 
 const legendOpen = ref(true);
+let initialTimerInterval: number | null = null;
+
+function clearInitialTimer() {
+  if (initialTimerInterval) {
+    clearInterval(initialTimerInterval);
+    initialTimerInterval = null;
+  }
+}
+
+// Stop the initial timer when phase changes away from programming
+watch(() => game.phase, (phase) => {
+  if (phase !== 'programming') {
+    clearInitialTimer();
+  }
+});
 
 const legendItems = [
   { cls: 'tile-floor', label: 'Floor' },
@@ -181,10 +196,23 @@ onMounted(async () => {
   } catch {
     // error shown via store
   }
+
+  // Start timer if joining mid-programming phase (e.g. first round,
+  // where GAME_CARDS_DEALT was emitted before the client joined the room)
+  if (game.gameState?.phase === 'programming' && game.gameState.timerSeconds && game.timerSeconds <= 0) {
+    game.timerSeconds = game.gameState.timerSeconds;
+    initialTimerInterval = window.setInterval(() => {
+      game.timerSeconds = Math.max(0, game.timerSeconds - 1);
+      if (game.timerSeconds <= 0) {
+        clearInitialTimer();
+      }
+    }, 1000);
+  }
 });
 
 onUnmounted(() => {
   game.cleanupSocketListeners();
+  clearInitialTimer();
 });
 </script>
 

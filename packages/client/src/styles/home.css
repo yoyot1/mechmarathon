@@ -1,0 +1,41 @@
+.home {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  text-align: center;
+  gap: 1.5rem;
+}
+
+.home h1 {
+  font-size: 3rem;
+  background: linear-gradient(135deg, #00d4ff, #7b2ff7);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.home .actions {
+  display: flex;
+  gap: 1rem;
+}
+
+.home .btn {
+  padding: 0.75rem 2rem;
+  border-radius: 0.5rem;
+  text-decoration: none;
+  font-weight: 600;
+  background: #7b2ff7;
+  color: white;
+  transition: opacity 0.2s;
+}
+
+.home .btn:hover {
+  opacity: 0.85;
+}
+
+.home .btn-secondary {
+  background: transparent;
+  border: 2px solid #7b2ff7;
+  color: #7b2ff7;
+}

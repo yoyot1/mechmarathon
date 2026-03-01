@@ -6,14 +6,15 @@ A web-based real-time multiplayer game inspired by the RoboRally board game. Pla
 
 | Component | Technology | Notes |
 |-----------|------------|-------|
-| Language | TypeScript | Full-stack, shared types between client/server |
-| Frontend | Vue 3 + Vite | Composition API, `<script setup>` syntax |
-| State | Pinia | Client-side state management |
+| Language | JavaScript (ES modules) | Full-stack, no TypeScript |
+| Frontend | Vanilla JS + Vite | Template strings, targeted DOM updates |
+| Routing | Custom History API router | `data-link` attribute for SPA navigation |
+| State | Plain JS objects | `state/auth.js`, `state/lobby.js`, `state/game.js` |
 | Game Rendering | PixiJS 8 | 2D sprites, animations, future isometric view |
 | Backend | Node.js + Express | REST API + Socket.IO for real-time |
 | Real-time | Socket.IO | WebSocket rooms per game instance |
 | Database | PostgreSQL | User accounts, game history, reputation |
-| ORM | Prisma | Type-safe queries, migrations |
+| ORM | Prisma | Queries, migrations |
 | Auth | JWT + bcrypt | Email/password, passkey-ready schema |
 | Testing | Vitest | Unit and integration tests |
 | Package Manager | pnpm | Workspace monorepo |
@@ -23,40 +24,47 @@ A web-based real-time multiplayer game inspired by the RoboRally board game. Pla
 ```
 mechmarathon/
 ├── packages/
-│   ├── shared/          # Shared types, constants, game logic
+│   ├── shared/          # Shared constants, game logic (pure JS)
 │   │   └── src/
-│   │       ├── types/   # Game, User, Lobby type definitions
-│   │       └── constants.ts
+│   │       ├── constants.js
+│   │       └── game/    # deck, movement, board, execution
 │   ├── server/          # Express + Socket.IO backend
 │   │   ├── src/
+│   │   │   ├── routes/      # auth.js, lobby.js
+│   │   │   ├── socket/      # lobbyHandlers.js, gameHandlers.js
+│   │   │   ├── game/        # GameInstance.js, GameManager.js, BotPlayer.js
+│   │   │   ├── middleware/   # auth.js
+│   │   │   └── lib/         # prisma.js, lobbyUtils.js
 │   │   └── prisma/      # Database schema and migrations
-│   └── client/          # Vue 3 + Vite frontend
+│   └── client/          # Vanilla JS + Vite frontend
 │       └── src/
-│           ├── views/   # Page components (Home, Login, Lobby, Game)
-│           └── router/  # Vue Router configuration
+│           ├── views/       # home, login, register, lobbyList, lobby, game, boardCanvas
+│           ├── state/       # auth.js, lobby.js, game.js
+│           ├── lib/         # api.js, socket.js, router.js, board-renderer/
+│           └── styles/      # CSS files per view
 ├── docker-compose.yml   # PostgreSQL for local dev
-├── pnpm-workspace.yaml  # Monorepo workspace config
-└── tsconfig.base.json   # Shared TypeScript config
+└── pnpm-workspace.yaml  # Monorepo workspace config
 ```
 
 ## Development Guidelines
 
 ### Code Style
-- TypeScript strict mode everywhere
-- Vue Composition API with `<script setup lang="ts">`
-- Use shared types from `@mechmarathon/shared` — never duplicate type definitions
+- Plain JavaScript with ES module syntax (`import`/`export`)
+- No TypeScript, no build step for shared/server packages
+- Use shared constants from `@mechmarathon/shared` — never duplicate
 - Server-authoritative game state: all game logic validation happens server-side
 
 ### Architecture Principles
 - Game state mutations only on the server; clients receive state updates via Socket.IO
 - REST API for auth, user profiles, lobby CRUD
 - WebSocket events for real-time game play (card dealing, programming, execution)
-- All socket event names defined in `packages/shared/src/constants.ts`
+- All socket event names defined in `packages/shared/src/constants.js`
+- Views export `render(container, params)` and `unmount()` lifecycle functions
+- State modules use callback-based updates (no reactive framework)
 
 ### Testing Strategy
 - Unit test game logic in `shared` package (card execution, board mechanics)
 - Unit test API routes and socket handlers in `server`
-- Component tests for Vue views in `client`
 - Run all tests: `pnpm test`
 
 ### Git Workflow
@@ -72,8 +80,8 @@ mechmarathon/
 pnpm dev
 
 # Start individual services
-pnpm dev:client    # Vue dev server on :5173
-pnpm dev:server    # Express server on :3000
+pnpm dev:client    # Vite dev server on :5173
+pnpm dev:server    # Express server on :3000 (node --watch)
 
 # Database
 docker compose up -d              # Start PostgreSQL
@@ -113,21 +121,18 @@ pnpm --filter @mechmarathon/server add <package>
 
 ### Completed
 - [x] Project initialized: monorepo with `shared`, `server`, `client` packages
-- [x] Devcontainer configured (Node 20, Docker-outside-of-Docker, PostgreSQL client, Vue/TS extensions)
-- [x] Shared types defined: Game, Board, Robot, Card, User, Lobby, constants
+- [x] Devcontainer configured (Node 20, Docker-outside-of-Docker, PostgreSQL client)
+- [x] Shared constants and game logic (deck, movement, board, execution)
 - [x] Server scaffolded: Express + Socket.IO, Prisma schema (User, UserStats, Game, GamePlayer)
-- [x] Client scaffolded: Vue 3 + Vite, router (Home, Login, Register, LobbyList, Lobby, Game views)
+- [x] Client scaffolded: Vite, custom router (Home, Login, Register, LobbyList, Lobby, Game views)
 - [x] Docker Compose for PostgreSQL
-- [x] Dependencies installed via pnpm
+- [x] Auth routes (register, login, JWT middleware)
+- [x] Lobby CRUD + Socket.IO lobby events
+- [x] Core game engine (card dealing, programming, execution)
+- [x] Card programming UI (register slots, hand cards, submit, timer)
+- [x] PixiJS board renderer (TileLayer, RobotLayer, AnimationQueue)
+- [x] Refactored from Vue + Pinia + TypeScript to vanilla JS
 
 ### Next Steps
-- [x] ~~Rebuild devcontainer to get Node 20~~ — Done (Node 20.20.0, switched to docker-outside-of-docker)
-- [x] ~~Start PostgreSQL and run first Prisma migration~~ — Done (migration `20260208040944_init` applied)
-- [x] ~~GitHub remote repository~~ — `yoyot1/mechmarathon` configured
-- [x] ~~Implement auth routes (register, login, JWT middleware)~~ — Done (POST /register, POST /login, GET /me, Pinia store, router guards)
-- [x] ~~Implement lobby CRUD + Socket.IO lobby events~~ — Done (REST: POST/GET /api/lobbies, Socket: join/leave/ready/start, Pinia store, LobbyListView + LobbyView)
-- [x] ~~Implement core game engine (card dealing, programming, execution)~~ — Done (shared game logic, GameInstance, GameManager, socket handlers, Pinia store, CSS grid board view)
-- [x] ~~Build card programming UI~~ — Done (register slots, hand cards, submit, timer, integrated into GameView)
-- [x] ~~Build PixiJS board renderer~~ — Done (TileLayer, RobotLayer, AnimationQueue, BoardCanvas.vue; replaces CSS grid with animated PixiJS canvas)
 - [ ] Add unit tests for shared game logic
 - [ ] Implement reputation updates on game completion

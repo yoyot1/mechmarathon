@@ -1,0 +1,148 @@
+.lobby-view {
+  padding: 2rem;
+  max-width: 600px;
+  margin: 0 auto;
+}
+
+.lobby-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 2rem;
+}
+
+.lobby-header h2 {
+  font-size: 1.5rem;
+  margin-bottom: 0.25rem;
+}
+
+.lobby-meta {
+  font-size: 0.85rem;
+  color: #888;
+}
+
+.player-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-bottom: 2rem;
+}
+
+.player-card {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem 1rem;
+  background: #1a1a2e;
+  border-radius: 0.5rem;
+  border: 1px solid #222;
+}
+
+.player-card.host {
+  border-color: #7b2ff7;
+}
+
+.player-color {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.player-name {
+  flex: 1;
+  font-weight: 500;
+}
+
+.host-badge {
+  font-size: 0.7rem;
+  background: #7b2ff7;
+  color: white;
+  padding: 0.1rem 0.4rem;
+  border-radius: 0.25rem;
+  margin-left: 0.5rem;
+  vertical-align: middle;
+}
+
+.ready-status {
+  font-size: 0.85rem;
+  color: #888;
+}
+
+.ready-status.ready {
+  color: #2ecc71;
+}
+
+.lobby-view .actions {
+  display: flex;
+  gap: 1rem;
+}
+
+.lobby-view .btn {
+  padding: 0.75rem 1.5rem;
+  border: none;
+  border-radius: 0.5rem;
+  background: #7b2ff7;
+  color: white;
+  font-weight: 600;
+  cursor: pointer;
+  font-size: 0.9rem;
+  transition: opacity 0.2s;
+}
+
+.lobby-view .btn:hover {
+  opacity: 0.85;
+}
+
+.lobby-view .btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.lobby-view .btn-small {
+  padding: 0.5rem 1rem;
+  font-size: 0.85rem;
+}
+
+.lobby-view .btn-secondary {
+  background: transparent;
+  border: 2px solid #7b2ff7;
+  color: #7b2ff7;
+}
+
+.btn-bot {
+  background: #3498db;
+}
+
+.btn-start {
+  background: #2ecc71;
+}
+
+.btn-start:hover {
+  opacity: 0.85;
+}
+
+.lobby-view .loading {
+  text-align: center;
+  padding: 4rem;
+  color: #888;
+}
+
+.error-page {
+  text-align: center;
+  padding: 4rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+}
+
+.lobby-view .error {
+  color: #ff4444;
+  font-size: 0.9rem;
+  margin-bottom: 0.5rem;
+}
+
+.lobby-view a {
+  text-decoration: none;
+}

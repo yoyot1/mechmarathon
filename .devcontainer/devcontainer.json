@@ -25,7 +25,7 @@
         "github.vscode-pull-request-github",
         "dbaeumer.vscode-eslint",
         "esbenp.prettier-vscode",
-        "Vue.volar",
+
         "ckolkman.vscode-postgres"
       ],
       "settings": {

@@ -26,7 +26,10 @@ export function render(container) {
         <div class="content">
           <div class="toolbar">
             <h2>Game Lobbies</h2>
-            <button class="btn" id="toggle-create-btn">${showCreateForm ? 'Cancel' : 'Create Game'}</button>
+            <div>
+              <a href="/boards" data-link class="btn btn-secondary btn-small" style="margin-right:0.5rem">Board Library</a>
+              <button class="btn" id="toggle-create-btn">${showCreateForm ? 'Cancel' : 'Create Game'}</button>
+            </div>
           </div>
 
           ${showCreateForm ? `

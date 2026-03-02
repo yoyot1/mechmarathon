@@ -43,6 +43,17 @@ export const SPEED = {
   DIRECTION_CHOICE_TIMEOUT_SECONDS: 15,
 };
 
+/** Board constants */
+export const BOARD = {
+  SIZE: 12,
+  NAME_MIN_LENGTH: 3,
+  NAME_MAX_LENGTH: 60,
+  DESCRIPTION_MAX_LENGTH: 500,
+  MAX_CHECKPOINTS: 8,
+  MAX_SPAWN_POINTS: 8,
+  TILE_TYPES: ['floor', 'conveyor', 'express_conveyor', 'gear_cw', 'gear_ccw', 'pit', 'repair', 'laser', 'spawn'],
+};
+
 /** Reputation system constants */
 export const REPUTATION = {
   INITIAL: 100,
@@ -80,6 +91,10 @@ export const EVENTS = {
   GAME_DEBUG_STEP: 'game:debug_step',
   GAME_DEBUG_STEP_BACK: 'game:debug_step_back',
   GAME_LEAVE: 'game:leave',
+
+  // Map config events
+  LOBBY_MAP_CONFIG: 'lobby:map_config',
+  LOBBY_MAP_UPDATE: 'lobby:map_update',
 
   // Chat events
   CHAT_MESSAGE: 'chat:message',

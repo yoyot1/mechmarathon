@@ -19,6 +19,7 @@ model User {
   stats      UserStats?
   hostedGames Game[]      @relation("host")
   players     GamePlayer[]
+  boards      Board[]     @relation("boardAuthor")
 
   @@map("users")
 }
@@ -36,6 +37,23 @@ model UserStats {
   @@map("user_stats")
 }
 
+model Board {
+  id          String   @id @default(uuid())
+  name        String
+  description String   @default("")
+  tiles       Json
+  authorId    String?  @map("author_id")
+  isOfficial  Boolean  @default(false) @map("is_official")
+  isPublished Boolean  @default(false) @map("is_published")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  author User?  @relation("boardAuthor", fields: [authorId], references: [id])
+  games  Game[] @relation("gameBoard")
+
+  @@map("boards")
+}
+
 model Game {
   id          String     @id @default(uuid())
   name        String
@@ -43,11 +61,13 @@ model Game {
   visibility  String     @default("public")
   status      String     @default("waiting")
   maxPlayers  Int        @default(8) @map("max_players")
-  boardId     String     @map("board_id")
+  boardId     String?    @map("board_id")
+  mapConfig   Json?      @map("map_config")
   createdAt   DateTime   @default(now()) @map("created_at")
   finishedAt  DateTime?  @map("finished_at")
 
   host    User         @relation("host", fields: [hostId], references: [id])
+  board   Board?       @relation("gameBoard", fields: [boardId], references: [id])
   players GamePlayer[]
 
   @@map("games")

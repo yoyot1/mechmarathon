@@ -132,7 +132,20 @@ pnpm --filter @mechmarathon/server add <package>
 - [x] Card programming UI (register slots, hand cards, submit, timer)
 - [x] PixiJS board renderer (TileLayer, RobotLayer, AnimationQueue)
 - [x] Refactored from Vue + Pinia + TypeScript to vanilla JS
+- [x] Board library + map configuration system
+  - Default board resized to 12x12 (standard RoboRally size)
+  - Board model in DB (tiles only, 12x12, author, official/published flags)
+  - Board CRUD API (`/api/boards`) with Zod validation
+  - Board editor view (tile painter, wall mode, eraser, direction selector)
+  - Board library view (Official/Community/My Boards tabs)
+  - Board rotation (`rotateBoard`) and multi-board assembly (`assembleMap`)
+  - Map configurator in lobby (host adds boards, sets positions/rotation, places checkpoints + spawns)
+  - Game engine accepts boardData from map config (with default board fallback)
+  - Seed script for default "Factory Floor" board
+  - New socket events: `LOBBY_MAP_CONFIG`, `LOBBY_MAP_UPDATE`
 
 ### Next Steps
 - [ ] Add unit tests for shared game logic
 - [ ] Implement reputation updates on game completion
+- [ ] Create the 59 official RoboRally board definitions
+- [ ] Board editor enhancements (undo/redo, copy/paste regions, import/export)

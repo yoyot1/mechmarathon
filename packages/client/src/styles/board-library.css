@@ -1,0 +1,139 @@
+.board-library {
+  padding: 2rem;
+  max-width: 900px;
+  margin: 0 auto;
+}
+
+.board-library-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1.5rem;
+}
+
+.board-library-header h2 {
+  font-size: 1.3rem;
+}
+
+.board-library .tabs {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 1.5rem;
+}
+
+.board-library .tab-btn {
+  padding: 0.5rem 1rem;
+  border: 2px solid #333;
+  border-radius: 0.4rem;
+  background: transparent;
+  color: #aaa;
+  cursor: pointer;
+  font-size: 0.85rem;
+  transition: border-color 0.15s, color 0.15s;
+}
+
+.board-library .tab-btn:hover {
+  border-color: #555;
+  color: white;
+}
+
+.board-library .tab-btn.active {
+  border-color: #7b2ff7;
+  color: white;
+  background: #2a1a4e;
+}
+
+.board-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+  gap: 1rem;
+}
+
+.board-card {
+  padding: 1rem;
+  background: #1a1a2e;
+  border-radius: 0.5rem;
+  border: 1px solid #222;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  transition: border-color 0.15s;
+}
+
+.board-card:hover {
+  border-color: #444;
+}
+
+.board-card h3 {
+  font-size: 1rem;
+  margin: 0;
+}
+
+.board-card .board-meta {
+  font-size: 0.8rem;
+  color: #888;
+}
+
+.board-card .board-description {
+  font-size: 0.85rem;
+  color: #aaa;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.board-card .board-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.25rem;
+}
+
+.board-card .badge {
+  display: inline-block;
+  font-size: 0.7rem;
+  padding: 0.1rem 0.4rem;
+  border-radius: 0.25rem;
+  background: #7b2ff7;
+  color: white;
+}
+
+.board-card .badge-official {
+  background: #2ecc71;
+}
+
+.board-library .btn {
+  padding: 0.5rem 1rem;
+  border: none;
+  border-radius: 0.4rem;
+  background: #7b2ff7;
+  color: white;
+  font-weight: 600;
+  cursor: pointer;
+  font-size: 0.85rem;
+  transition: opacity 0.2s;
+}
+
+.board-library .btn:hover { opacity: 0.85; }
+
+.board-library .btn-secondary {
+  background: transparent;
+  border: 2px solid #7b2ff7;
+  color: #7b2ff7;
+}
+
+.board-library .btn-small {
+  padding: 0.35rem 0.75rem;
+  font-size: 0.8rem;
+}
+
+.board-library .empty {
+  text-align: center;
+  padding: 3rem;
+  color: #888;
+}
+
+.board-library .loading {
+  text-align: center;
+  padding: 3rem;
+  color: #888;
+}

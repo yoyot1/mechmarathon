@@ -6,7 +6,7 @@ import {
 } from '@mechmarathon/shared';
 
 export class GameInstance {
-  constructor(id, playerInfos, io, botPlayerIds) {
+  constructor(id, playerInfos, io, botPlayerIds, boardData) {
     this.id = id;
     this.io = io;
     this.playerInfos = playerInfos;
@@ -26,29 +26,49 @@ export class GameInstance {
     this.round = 0;
     this.winnerId = null;
 
-    // Use default board
-    this.board = {
-      width: DEFAULT_BOARD.width,
-      height: DEFAULT_BOARD.height,
-      tiles: DEFAULT_BOARD.tiles,
-    };
-    this.checkpoints = getDefaultCheckpoints();
+    // Use provided board data or fall back to defaults
+    if (boardData) {
+      this.board = {
+        width: boardData.board.width,
+        height: boardData.board.height,
+        tiles: boardData.board.tiles,
+      };
+      this.checkpoints = boardData.checkpoints || getDefaultCheckpoints();
+      this.spawnPoints = boardData.spawnPoints || [];
+    } else {
+      this.board = {
+        width: DEFAULT_BOARD.width,
+        height: DEFAULT_BOARD.height,
+        tiles: DEFAULT_BOARD.tiles,
+      };
+      this.checkpoints = getDefaultCheckpoints();
+      this.spawnPoints = [];
+    }
 
-    // Place all robots on checkpoint 1 (all virtual)
-    const startPos = this.checkpoints.find((c) => c.number === 1).position;
-    this.robots = playerInfos.map((p, i) => ({
-      id: `robot-${i}`,
-      playerId: p.userId,
-      position: { ...startPos },
-      direction: 'north',
-      health: GAME.STARTING_HEALTH,
-      lives: GAME.STARTING_LIVES,
-      checkpoint: 0,
-      virtual: true,
-      archivePosition: { ...startPos },
-    }));
+    // Determine start position: use first spawn point, or first checkpoint
+    const startPos = this.spawnPoints.length > 0
+      ? this.spawnPoints.sort((a, b) => a.number - b.number)[0].position
+      : this.checkpoints.find((c) => c.number === 1)?.position || { x: 0, y: 0 };
 
-    // Auto-capture checkpoint 1 since robots start on it
+    // Place robots: if we have enough spawn points, spread them; otherwise all on startPos
+    const sortedSpawns = [...this.spawnPoints].sort((a, b) => a.number - b.number);
+
+    this.robots = playerInfos.map((p, i) => {
+      const pos = sortedSpawns[i]?.position || startPos;
+      return {
+        id: `robot-${i}`,
+        playerId: p.userId,
+        position: { ...pos },
+        direction: 'north',
+        health: GAME.STARTING_HEALTH,
+        lives: GAME.STARTING_LIVES,
+        checkpoint: 0,
+        virtual: true,
+        archivePosition: { ...pos },
+      };
+    });
+
+    // Auto-capture checkpoint 1 since robots start on it (if positioned on it)
     processCheckpoints(this.robots, this.checkpoints);
 
     if (botPlayerIds) {

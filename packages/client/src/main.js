@@ -33,6 +33,21 @@ const routes = [
     view: () => import('./views/game.js'),
     meta: { requiresAuth: true },
   },
+  {
+    path: '/boards',
+    view: () => import('./views/boardLibrary.js'),
+    meta: { requiresAuth: true },
+  },
+  {
+    path: '/boards/new',
+    view: () => import('./views/boardEditor.js'),
+    meta: { requiresAuth: true },
+  },
+  {
+    path: '/boards/edit/:id',
+    view: () => import('./views/boardEditor.js'),
+    meta: { requiresAuth: true },
+  },
 ];
 
 const router = createRouter(routes, {

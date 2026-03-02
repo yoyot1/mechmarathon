@@ -5,6 +5,7 @@ import { Server } from 'socket.io';
 import dotenv from 'dotenv';
 import { authRouter } from './routes/auth.js';
 import { lobbyRouter } from './routes/lobby.js';
+import { boardRouter } from './routes/boards.js';
 import { registerAuthMiddleware } from './socket/authMiddleware.js';
 import { registerLobbyHandlers } from './socket/lobbyHandlers.js';
 import { registerGameHandlers } from './socket/gameHandlers.js';
@@ -33,6 +34,9 @@ app.use('/api/auth', authRouter);
 
 // Lobby routes
 app.use('/api/lobbies', lobbyRouter);
+
+// Board routes
+app.use('/api/boards', boardRouter);
 
 // Socket.IO auth middleware
 registerAuthMiddleware(io);

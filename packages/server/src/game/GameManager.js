@@ -6,8 +6,8 @@ class GameManagerSingleton {
     this.playerGameMap = new Map(); // userId → gameId
   }
 
-  createGame(gameId, playerInfos, io, botPlayerIds) {
-    const instance = new GameInstance(gameId, playerInfos, io, botPlayerIds);
+  createGame(gameId, playerInfos, io, botPlayerIds, boardData) {
+    const instance = new GameInstance(gameId, playerInfos, io, botPlayerIds, boardData);
     this.games.set(gameId, instance);
 
     for (const p of playerInfos) {

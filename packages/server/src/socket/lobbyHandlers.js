@@ -1,4 +1,4 @@
-import { EVENTS, GAME, ROBOT_COLORS } from '@mechmarathon/shared';
+import { EVENTS, GAME, ROBOT_COLORS, assembleMap } from '@mechmarathon/shared';
 import { prisma } from '../lib/prisma.js';
 import { toLobby, lobbyInclude } from '../lib/lobbyUtils.js';
 import { GameManager } from '../game/GameManager.js';
@@ -147,6 +147,61 @@ export function registerLobbyHandlers(io, socket) {
     ack?.({});
   });
 
+  // lobby:map_config — Host configures the map
+  socket.on(EVENTS.LOBBY_MAP_CONFIG, async (data, ack) => {
+    const { lobbyId, mapConfig } = data;
+
+    const game = await prisma.game.findUnique({ where: { id: lobbyId } });
+    if (!game || game.status !== 'waiting') {
+      ack?.({ error: 'Lobby not found' });
+      return;
+    }
+
+    if (game.hostId !== userId) {
+      ack?.({ error: 'Only the host can configure the map' });
+      return;
+    }
+
+    // Validate mapConfig structure
+    if (!mapConfig || !Array.isArray(mapConfig.boards) || mapConfig.boards.length === 0) {
+      ack?.({ error: 'Invalid map configuration: must have at least one board' });
+      return;
+    }
+
+    // Validate all referenced board IDs exist
+    const boardIds = mapConfig.boards.map((b) => b.boardId);
+    const boards = await prisma.board.findMany({
+      where: { id: { in: boardIds } },
+      select: { id: true },
+    });
+    const foundIds = new Set(boards.map((b) => b.id));
+    const missing = boardIds.filter((id) => !foundIds.has(id));
+    if (missing.length > 0) {
+      ack?.({ error: `Board(s) not found: ${missing.join(', ')}` });
+      return;
+    }
+
+    // Validate checkpoints and spawn points
+    if (mapConfig.checkpoints && !Array.isArray(mapConfig.checkpoints)) {
+      ack?.({ error: 'Invalid checkpoints format' });
+      return;
+    }
+    if (mapConfig.spawnPoints && !Array.isArray(mapConfig.spawnPoints)) {
+      ack?.({ error: 'Invalid spawn points format' });
+      return;
+    }
+
+    await prisma.game.update({
+      where: { id: lobbyId },
+      data: { mapConfig },
+    });
+
+    // Broadcast map config update to all lobby members
+    io.to(lobbyRoom(lobbyId)).emit(EVENTS.LOBBY_MAP_UPDATE, { mapConfig });
+    await broadcastLobbyUpdate(io, lobbyId);
+    ack?.({});
+  });
+
   // lobby:start — Host starts the game
   socket.on(EVENTS.LOBBY_START, async (data, ack) => {
     const { lobbyId } = data;
@@ -183,6 +238,21 @@ export function registerLobbyHandlers(io, socket) {
       data: { status: 'in_progress' },
     });
 
+    // Assemble board data from mapConfig or use defaults
+    let boardData = null;
+    if (game.mapConfig) {
+      try {
+        const boardIds = game.mapConfig.boards.map((b) => b.boardId);
+        const boards = await prisma.board.findMany({
+          where: { id: { in: boardIds } },
+        });
+        const boardsById = new Map(boards.map((b) => [b.id, { width: 12, height: 12, tiles: b.tiles }]));
+        boardData = assembleMap(game.mapConfig, boardsById);
+      } catch (e) {
+        console.error('Failed to assemble map, falling back to default:', e);
+      }
+    }
+
     // Create in-memory game instance
     const playerInfos = game.players.map((p) => ({
       userId: p.userId,
@@ -192,7 +262,7 @@ export function registerLobbyHandlers(io, socket) {
     const botIds = game.players
       .filter((p) => p.user.email.endsWith('@mechmarathon.local'))
       .map((p) => p.userId);
-    GameManager.createGame(lobbyId, playerInfos, io, botIds);
+    GameManager.createGame(lobbyId, playerInfos, io, botIds, boardData);
 
     const lobby = await broadcastLobbyUpdate(io, lobbyId);
     ack?.({ lobby: lobby ?? undefined });

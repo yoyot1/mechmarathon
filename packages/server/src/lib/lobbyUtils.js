@@ -7,6 +7,7 @@ export const lobbyInclude = {
 
 /** Serialize a Prisma Game (with players+users) into a Lobby DTO */
 export function toLobby(game) {
+  const mapConfig = game.mapConfig || null;
   return {
     id: game.id,
     name: game.name,
@@ -15,6 +16,13 @@ export function toLobby(game) {
     status: game.status,
     maxPlayers: game.maxPlayers,
     boardId: game.boardId,
+    mapConfig,
+    mapSummary: mapConfig ? {
+      boardCount: mapConfig.boards?.length || 0,
+      checkpointCount: mapConfig.checkpoints?.length || 0,
+      spawnCount: mapConfig.spawnPoints?.length || 0,
+      configured: true,
+    } : null,
     createdAt: game.createdAt.toISOString(),
     players: game.players.map(
       (p) => ({

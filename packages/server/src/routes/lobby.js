@@ -41,7 +41,6 @@ lobbyRouter.post('/', requireAuth, async (req, res) => {
       hostId: userId,
       visibility,
       maxPlayers,
-      boardId: 'default',
       players: {
         create: {
           userId,

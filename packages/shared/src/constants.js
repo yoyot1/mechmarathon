@@ -51,7 +51,10 @@ export const BOARD = {
   DESCRIPTION_MAX_LENGTH: 500,
   MAX_CHECKPOINTS: 8,
   MAX_SPAWN_POINTS: 8,
-  TILE_TYPES: ['floor', 'conveyor', 'express_conveyor', 'gear_cw', 'gear_ccw', 'pit', 'repair', 'laser', 'spawn'],
+  TILE_TYPES: ['floor', 'conveyor', 'express_conveyor', 'gear_cw', 'gear_ccw', 'pit', 'trap_pit', 'repair', 'spawn', 'oil_slick', 'water', 'current', 'portal', 'drain', 'radioactive_drain', 'teleporter', 'randomizer', 'repulsor', 'radiation', 'radioactive_waste', 'chop_shop', 'ledge', 'ramp'],
+  SIDE_FEATURE_TYPES: ['laser', 'pusher'],
+  OVERLAY_TYPES: ['flamer', 'crusher'],
+  DIRECTIONS: ['north', 'south', 'east', 'west'],
 };
 
 /** Reputation system constants */

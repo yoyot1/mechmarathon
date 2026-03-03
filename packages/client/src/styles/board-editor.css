@@ -131,9 +131,23 @@
 .editor-cell[data-type="gear_cw"]          { background: #4a3a6a; }
 .editor-cell[data-type="gear_ccw"]         { background: #3a4a6a; }
 .editor-cell[data-type="pit"]              { background: #1a1a1a; }
+.editor-cell[data-type="trap_pit"]         { background: #2a1a1a; }
 .editor-cell[data-type="repair"]           { background: #2a5a5a; }
-.editor-cell[data-type="laser"]            { background: #6a2a2a; }
 .editor-cell[data-type="spawn"]            { background: #5a4a2a; }
+.editor-cell[data-type="oil_slick"]        { background: #1a1a1a; }
+.editor-cell[data-type="water"]            { background: #1a3a6a; }
+.editor-cell[data-type="current"]          { background: #1a4a6a; }
+.editor-cell[data-type="portal"]           { background: #4a1a5a; }
+.editor-cell[data-type="drain"]            { background: #0a0a1a; }
+.editor-cell[data-type="radioactive_drain"] { background: #2a3a0a; }
+.editor-cell[data-type="teleporter"]        { background: #2a4a6a; }
+.editor-cell[data-type="randomizer"]        { background: #5a3a5a; }
+.editor-cell[data-type="repulsor"]          { background: #6a2a2a; }
+.editor-cell[data-type="radiation"]         { background: #3a4a0a; }
+.editor-cell[data-type="radioactive_waste"] { background: #4a3a0a; }
+.editor-cell[data-type="chop_shop"]         { background: #3a3a3a; }
+.editor-cell[data-type="ledge"]             { background: #4a4a2a; }
+.editor-cell[data-type="ramp"]              { background: #3a4a3a; }
 
 /* Direction arrows */
 .editor-cell .arrow {
@@ -226,4 +240,383 @@
 .board-editor .error {
   color: #ff4444;
   font-size: 0.85rem;
+}
+
+/* Side feature indicators on cell edges */
+.side-feature {
+  position: absolute;
+  font-size: 0.55rem;
+  color: #ff4444;
+  pointer-events: none;
+  line-height: 1;
+  z-index: 2;
+}
+
+.side-feature-north { top: 1px; left: 50%; transform: translateX(-50%); }
+.side-feature-south { bottom: 1px; left: 50%; transform: translateX(-50%); }
+.side-feature-east  { right: 1px; top: 50%; transform: translateY(-50%); }
+.side-feature-west  { left: 1px; top: 50%; transform: translateY(-50%); }
+
+/* Entry indicators (small arrow on conveyor entry sides) */
+.entry-indicator {
+  position: absolute;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.entry-indicator.entry-north { top: 1px; left: 50%; transform: translateX(-50%); border-left: 4px solid transparent; border-right: 4px solid transparent; border-top: 5px solid rgba(0,255,100,0.5); }
+.entry-indicator.entry-south { bottom: 1px; left: 50%; transform: translateX(-50%); border-left: 4px solid transparent; border-right: 4px solid transparent; border-bottom: 5px solid rgba(0,255,100,0.5); }
+.entry-indicator.entry-east  { right: 1px; top: 50%; transform: translateY(-50%); border-top: 4px solid transparent; border-bottom: 4px solid transparent; border-right: 5px solid rgba(0,255,100,0.5); }
+.entry-indicator.entry-west  { left: 1px; top: 50%; transform: translateY(-50%); border-top: 4px solid transparent; border-bottom: 4px solid transparent; border-left: 5px solid rgba(0,255,100,0.5); }
+
+/* Selected cell highlight */
+.editor-cell.selected {
+  border-color: #ffd700 !important;
+  box-shadow: inset 0 0 6px rgba(255, 215, 0, 0.4);
+}
+
+/* Entry picker */
+.entry-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+}
+
+.entry-btn {
+  padding: 0.25rem 0.5rem;
+  border: 1px solid #333;
+  border-radius: 0.25rem;
+  background: #1a1a2e;
+  color: #ccc;
+  cursor: pointer;
+  font-size: 0.7rem;
+}
+
+.entry-btn.active {
+  border-color: #2ecc71;
+  background: #1a3a2a;
+  color: #2ecc71;
+}
+
+/* Strength picker */
+.strength-picker {
+  display: flex;
+  gap: 4px;
+}
+
+.strength-picker button {
+  padding: 0.3rem 0.6rem;
+  border: 1px solid #333;
+  border-radius: 0.25rem;
+  background: #1a1a2e;
+  color: #ccc;
+  cursor: pointer;
+  font-size: 0.8rem;
+}
+
+.strength-picker button.active {
+  border-color: #e74c3c;
+  background: #3a1a1a;
+  color: #e74c3c;
+}
+
+/* Help text in toolbar headers */
+.editor-toolbar .help-text {
+  font-weight: normal;
+  font-size: 0.65rem;
+  color: #666;
+  text-transform: none;
+}
+
+/* Tile info panel */
+.tile-info {
+  margin-top: 0.5rem;
+  padding: 0.75rem;
+  background: #1a1a2e;
+  border: 1px solid #333;
+  border-radius: 0.4rem;
+  font-size: 0.8rem;
+}
+
+.tile-info h4 {
+  margin: 0 0 0.5rem;
+  color: #ffd700;
+  font-size: 0.85rem;
+}
+
+.tile-info-row {
+  color: #aaa;
+  margin-bottom: 0.25rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.tile-info-row strong {
+  color: #fff;
+}
+
+.btn-remove-sf {
+  background: transparent;
+  border: 1px solid #e74c3c;
+  color: #e74c3c;
+  cursor: pointer;
+  font-size: 0.6rem;
+  padding: 0 0.3rem;
+  border-radius: 0.2rem;
+  margin-left: auto;
+}
+
+.btn-remove-sf:hover,
+.btn-remove-overlay:hover {
+  background: #3a1a1a;
+}
+
+.btn-remove-overlay {
+  background: transparent;
+  border: 1px solid #e74c3c;
+  color: #e74c3c;
+  cursor: pointer;
+  font-size: 0.6rem;
+  padding: 0 0.3rem;
+  border-radius: 0.2rem;
+  margin-left: auto;
+}
+
+/* Overlay indicators (shown in center-bottom of cell) */
+.overlay-indicator {
+  position: absolute;
+  bottom: 2px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 0.55rem;
+  pointer-events: none;
+  z-index: 2;
+  line-height: 1;
+}
+
+.overlay-indicator[data-overlay-type="crusher"] {
+  color: #aaaaaa;
+}
+
+.overlay-indicator[data-overlay-type="flamer"] {
+  color: #ff6600;
+}
+
+/* Phase picker */
+.phase-picker {
+  display: flex;
+  gap: 4px;
+}
+
+.phase-btn {
+  padding: 0.3rem 0.5rem;
+  border: 1px solid #333;
+  border-radius: 0.25rem;
+  background: #1a1a2e;
+  color: #ccc;
+  cursor: pointer;
+  font-size: 0.8rem;
+  min-width: 28px;
+  text-align: center;
+}
+
+.phase-btn.active {
+  border-color: #f39c12;
+  background: #3a2a1a;
+  color: #f39c12;
+}
+
+/* Phase dots on tiles (small numbers in corner) */
+.phase-dots {
+  position: absolute;
+  bottom: 1px;
+  right: 1px;
+  font-size: 0.45rem;
+  color: rgba(243, 156, 18, 0.7);
+  pointer-events: none;
+  letter-spacing: 0.5px;
+}
+
+/* Pusher side feature color */
+.side-feature[data-sf-type="pusher"] {
+  color: #aaaacc;
+}
+
+/* One-way wall indicators */
+.editor-cell .oneway-wall {
+  position: absolute;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.editor-cell .oneway-wall-north { top: 0; left: 2px; right: 2px; height: 3px; }
+.editor-cell .oneway-wall-south { bottom: 0; left: 2px; right: 2px; height: 3px; }
+.editor-cell .oneway-wall-east  { top: 2px; bottom: 2px; right: 0; width: 3px; }
+.editor-cell .oneway-wall-west  { top: 2px; bottom: 2px; left: 0; width: 3px; }
+
+.editor-cell .oneway-wall[data-blocks="entry"] {
+  background: repeating-linear-gradient(
+    90deg,
+    #2ecc71 0px, #2ecc71 4px,
+    transparent 4px, transparent 7px
+  );
+}
+.editor-cell .oneway-wall-north[data-blocks="entry"],
+.editor-cell .oneway-wall-south[data-blocks="entry"] {
+  background: repeating-linear-gradient(
+    90deg,
+    #2ecc71 0px, #2ecc71 4px,
+    transparent 4px, transparent 7px
+  );
+}
+.editor-cell .oneway-wall-east[data-blocks="entry"],
+.editor-cell .oneway-wall-west[data-blocks="entry"] {
+  background: repeating-linear-gradient(
+    0deg,
+    #2ecc71 0px, #2ecc71 4px,
+    transparent 4px, transparent 7px
+  );
+}
+
+.editor-cell .oneway-wall[data-blocks="exit"] {
+  background: repeating-linear-gradient(
+    90deg,
+    #e67e22 0px, #e67e22 4px,
+    transparent 4px, transparent 7px
+  );
+}
+.editor-cell .oneway-wall-north[data-blocks="exit"],
+.editor-cell .oneway-wall-south[data-blocks="exit"] {
+  background: repeating-linear-gradient(
+    90deg,
+    #e67e22 0px, #e67e22 4px,
+    transparent 4px, transparent 7px
+  );
+}
+.editor-cell .oneway-wall-east[data-blocks="exit"],
+.editor-cell .oneway-wall-west[data-blocks="exit"] {
+  background: repeating-linear-gradient(
+    0deg,
+    #e67e22 0px, #e67e22 4px,
+    transparent 4px, transparent 7px
+  );
+}
+
+/* Blocks picker */
+.blocks-picker {
+  display: flex;
+  gap: 4px;
+}
+
+.blocks-btn {
+  padding: 0.3rem 0.6rem;
+  border: 1px solid #333;
+  border-radius: 0.25rem;
+  background: #1a1a2e;
+  color: #ccc;
+  cursor: pointer;
+  font-size: 0.8rem;
+}
+
+.blocks-btn.active[data-blocks="entry"] {
+  border-color: #2ecc71;
+  background: #1a3a2a;
+  color: #2ecc71;
+}
+
+.blocks-btn.active[data-blocks="exit"] {
+  border-color: #e67e22;
+  background: #3a2a1a;
+  color: #e67e22;
+}
+
+/* Remove one-way wall button */
+.btn-remove-ow {
+  background: transparent;
+  border: 1px solid #e74c3c;
+  color: #e74c3c;
+  cursor: pointer;
+  font-size: 0.6rem;
+  padding: 0 0.3rem;
+  border-radius: 0.2rem;
+  margin-left: auto;
+}
+
+.btn-remove-ow:hover {
+  background: #3a1a1a;
+}
+
+/* Group picker (portal pairing) */
+.group-picker {
+  display: flex;
+  gap: 4px;
+}
+
+.group-btn {
+  padding: 0.3rem 0.6rem;
+  border: 1px solid #333;
+  border-radius: 0.25rem;
+  background: #1a1a2e;
+  color: #ccc;
+  cursor: pointer;
+  font-size: 0.8rem;
+  min-width: 28px;
+  text-align: center;
+}
+
+.group-btn.active {
+  border-color: #9b59b6;
+  background: #2a1a3a;
+  color: #bb77ee;
+}
+
+/* Group label on portal tiles */
+.group-label {
+  position: absolute;
+  top: 1px;
+  left: 1px;
+  font-size: 0.55rem;
+  font-weight: bold;
+  color: rgba(187, 119, 238, 0.8);
+  pointer-events: none;
+  line-height: 1;
+}
+
+/* Elevation picker */
+.elevation-picker {
+  display: flex;
+  gap: 4px;
+}
+
+.elevation-btn {
+  padding: 0.3rem 0.6rem;
+  border: 1px solid #333;
+  border-radius: 0.25rem;
+  background: #1a1a2e;
+  color: #ccc;
+  cursor: pointer;
+  font-size: 0.8rem;
+  min-width: 28px;
+  text-align: center;
+}
+
+.elevation-btn.active {
+  border-color: #ccaa44;
+  background: #2a2a1a;
+  color: #ccaa44;
+}
+
+/* Elevation badge on tiles */
+.elevation-badge {
+  position: absolute;
+  top: 1px;
+  right: 1px;
+  font-size: 0.45rem;
+  font-weight: bold;
+  color: rgba(204, 170, 68, 0.8);
+  pointer-events: none;
+  line-height: 1;
 }

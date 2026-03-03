@@ -336,9 +336,23 @@
 .composite-cell[data-type="gear_cw"]          { background: #4a3a6a; }
 .composite-cell[data-type="gear_ccw"]         { background: #3a4a6a; }
 .composite-cell[data-type="pit"]              { background: #1a1a1a; }
+.composite-cell[data-type="trap_pit"]         { background: #2a1a1a; }
 .composite-cell[data-type="repair"]           { background: #2a5a5a; }
-.composite-cell[data-type="laser"]            { background: #6a2a2a; }
 .composite-cell[data-type="spawn"]            { background: #5a4a2a; }
+.composite-cell[data-type="oil_slick"]        { background: #1a1a1a; }
+.composite-cell[data-type="water"]            { background: #1a3a6a; }
+.composite-cell[data-type="current"]          { background: #1a4a6a; }
+.composite-cell[data-type="portal"]           { background: #4a1a5a; }
+.composite-cell[data-type="drain"]            { background: #0a0a1a; }
+.composite-cell[data-type="radioactive_drain"] { background: #2a3a0a; }
+.composite-cell[data-type="teleporter"]        { background: #2a4a6a; }
+.composite-cell[data-type="randomizer"]        { background: #5a3a5a; }
+.composite-cell[data-type="repulsor"]          { background: #6a2a2a; }
+.composite-cell[data-type="radiation"]         { background: #3a4a0a; }
+.composite-cell[data-type="radioactive_waste"] { background: #4a3a0a; }
+.composite-cell[data-type="chop_shop"]         { background: #3a3a3a; }
+.composite-cell[data-type="ledge"]             { background: #4a4a2a; }
+.composite-cell[data-type="ramp"]              { background: #3a4a3a; }
 
 .composite-cell .checkpoint-marker {
   position: absolute;

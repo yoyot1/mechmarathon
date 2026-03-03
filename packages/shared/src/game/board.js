@@ -91,7 +91,7 @@ function rotateWalls(walls, rotation) {
   return walls.map((w) => rotateDirBy(w, rotation));
 }
 
-/** Rotate a tile's direction and walls CW by rotation degrees */
+/** Rotate a tile's direction, walls, entry, sideFeatures, and overlays CW by rotation degrees */
 function rotateTile(tile, rotation) {
   if (rotation === 0) return { ...tile };
   const rotated = { ...tile };
@@ -100,6 +100,25 @@ function rotateTile(tile, rotation) {
   }
   if (rotated.walls) {
     rotated.walls = rotateWalls(rotated.walls, rotation);
+  }
+  if (rotated.entry) {
+    rotated.entry = rotated.entry.map((dir) => rotateDirBy(dir, rotation));
+  }
+  if (rotated.sideFeatures) {
+    rotated.sideFeatures = rotated.sideFeatures.map((f) => ({
+      ...f,
+      side: rotateDirBy(f.side, rotation),
+    }));
+  }
+  // overlays have no directional properties, just shallow copy
+  if (rotated.overlays) {
+    rotated.overlays = rotated.overlays.map((o) => ({ ...o }));
+  }
+  if (rotated.oneWayWalls) {
+    rotated.oneWayWalls = rotated.oneWayWalls.map((ow) => ({
+      ...ow,
+      side: rotateDirBy(ow.side, rotation),
+    }));
   }
   return rotated;
 }

@@ -4,10 +4,36 @@ import { BOARD } from '@mechmarathon/shared';
 import { prisma } from '../lib/prisma.js';
 import { requireAuth } from '../middleware/auth.js';
 
+const directionEnum = z.enum(BOARD.DIRECTIONS);
+
+const sideFeatureSchema = z.object({
+  type: z.enum(BOARD.SIDE_FEATURE_TYPES),
+  side: directionEnum,
+  strength: z.number().int().min(1).max(3).optional(),
+  phases: z.array(z.number().int().min(1).max(5)).optional(),
+});
+
+const overlaySchema = z.object({
+  type: z.enum(BOARD.OVERLAY_TYPES),
+  phases: z.array(z.number().int().min(1).max(5)).optional(),
+});
+
+const oneWayWallSchema = z.object({
+  side: directionEnum,
+  blocks: z.enum(['entry', 'exit']),
+});
+
 const tileSchema = z.object({
   type: z.enum(BOARD.TILE_TYPES),
-  direction: z.enum(['north', 'south', 'east', 'west']).optional(),
-  walls: z.array(z.enum(['north', 'south', 'east', 'west'])).optional(),
+  direction: directionEnum.optional(),
+  walls: z.array(directionEnum).optional(),
+  oneWayWalls: z.array(oneWayWallSchema).optional(),
+  entry: z.array(directionEnum).optional(),
+  sideFeatures: z.array(sideFeatureSchema).optional(),
+  overlays: z.array(overlaySchema).optional(),
+  phases: z.array(z.number().int().min(1).max(5)).optional(),
+  group: z.string().max(4).optional(),
+  elevation: z.number().int().min(0).max(2).optional(),
 });
 
 const tilesSchema = z.array(z.array(tileSchema).length(BOARD.SIZE)).length(BOARD.SIZE);

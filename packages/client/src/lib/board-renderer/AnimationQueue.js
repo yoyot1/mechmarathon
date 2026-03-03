@@ -156,6 +156,48 @@ export class AnimationQueue {
         };
       }
 
+      case 'laser_hit':
+      case 'flamer': {
+        // Red/orange flash on hit robot
+        return {
+          robotId: ev.robotId,
+          type: 'flash',
+          color: ev.type === 'flamer' ? 0xff6600 : 0xff0000,
+        };
+      }
+
+      case 'crusher': {
+        // Crush animation — squash effect via fade out
+        const crusherPos = this.robotLayer.getRobotPosition(ev.robotId);
+        if (!crusherPos) return null;
+        return {
+          robotId: ev.robotId,
+          type: 'fade_out',
+          fromX: crusherPos.x,
+          fromY: crusherPos.y,
+          toX: crusherPos.x,
+          toY: crusherPos.y,
+          fromAlpha: 1,
+          toAlpha: 0,
+        };
+      }
+
+      case 'portal': {
+        // Teleport: fade out at source, fade in at destination
+        if (!ev.from || !ev.to) return null;
+        const portalFrom = boardToPixel(ev.from);
+        const portalTo = boardToPixel(ev.to);
+        // Position robot at destination immediately, animate as fade-in
+        this.robotLayer.setRobotPosition(ev.robotId, portalTo.x, portalTo.y);
+        this.robotLayer.setRobotAlpha(ev.robotId, 0);
+        return {
+          robotId: ev.robotId,
+          type: 'fade_in',
+          fromAlpha: 0,
+          toAlpha: 1,
+        };
+      }
+
       case 'checkpoint':
       case 'repair':
         // No visual tween needed
@@ -249,6 +291,15 @@ export class AnimationQueue {
       case 'fade_in':
         if (tween.fromAlpha != null && tween.toAlpha != null) {
           this.robotLayer.setRobotAlpha(tween.robotId, lerp(tween.fromAlpha, tween.toAlpha, t));
+        }
+        break;
+
+      case 'flash':
+        // Flash effect: briefly tint robot red then back
+        if (t < 0.5) {
+          this.robotLayer.setRobotTint(tween.robotId, tween.color);
+        } else {
+          this.robotLayer.setRobotTint(tween.robotId, 0xffffff);
         }
         break;
     }

@@ -148,4 +148,11 @@ export class RobotLayer {
     if (!sprite) return null;
     return sprite.arrow.rotation;
   }
+
+  setRobotTint(robotId, color) {
+    const sprite = this.sprites.get(robotId);
+    if (sprite) {
+      sprite.circle.tint = color;
+    }
+  }
 }

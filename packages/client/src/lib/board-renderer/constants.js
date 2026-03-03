@@ -10,6 +10,10 @@ export const WALL_THICKNESS = 4;
 /** Wall color */
 export const WALL_COLOR = 0xff8800;
 
+/** One-way wall colors */
+export const ONEWAY_WALL_ENTRY_COLOR = 0x2ecc71;
+export const ONEWAY_WALL_EXIT_COLOR = 0xe67e22;
+
 /** Robot circle radius */
 export const ROBOT_RADIUS = 14;
 
@@ -23,6 +27,7 @@ export const BOARD_BG_COLOR = 0x222222;
 export const TILE_COLORS = {
   floor: 0x2a2a3e,
   pit: 0x0a0a0a,
+  trap_pit: 0x1a0a0a,
   conveyor: 0x1a3a1a,
   express_conveyor: 0x2a1a4a,
   gear_cw: 0x3a2a1a,
@@ -31,7 +36,20 @@ export const TILE_COLORS = {
   wall: 0x4a4a4a,
   checkpoint: 0x3a3a1a,
   spawn: 0x2a2a3e,
-  laser: 0x3a1a1a,
+  oil_slick: 0x1a1a1a,
+  water: 0x1a2a4a,
+  current: 0x1a3a5a,
+  portal: 0x4a1a5a,
+  drain: 0x0a0a1a,
+  radioactive_drain: 0x2a3a0a,
+  teleporter: 0x2a4a6a,
+  randomizer: 0x5a3a5a,
+  repulsor: 0x6a2a2a,
+  radiation: 0x3a4a0a,
+  radioactive_waste: 0x4a3a0a,
+  chop_shop: 0x3a3a3a,
+  ledge: 0x4a4a2a,
+  ramp: 0x3a4a3a,
 };
 
 /** Tile symbols — non-directional types get a static string */
@@ -39,9 +57,48 @@ export const TILE_SYMBOLS = {
   gear_cw: '\u21BB',
   gear_ccw: '\u21BA',
   repair: '+',
-  laser: '\u26A1',
   pit: '\u2716',
+  trap_pit: '\u2716',
+  oil_slick: '\u25CF',
+  water: '\u2248',
+  portal: '\u25C9',
+  drain: '\u2B07',
+  radioactive_drain: '\u2622',
+  teleporter: '\u2726',
+  randomizer: '?',
+  repulsor: '\u2298',
+  radiation: '\u2622',
+  radioactive_waste: '\u2623',
+  chop_shop: '\u2692',
+  ledge: '\u2581',
 };
+
+/** Ramp arrow symbols (directional, reuse conveyor arrows) */
+export const RAMP_ARROWS = {
+  north: '\u25B3',
+  south: '\u25BD',
+  east: '\u25B7',
+  west: '\u25C1',
+};
+
+/** Laser beam rendering */
+export const LASER_BEAM_COLOR = 0xff0000;
+export const LASER_BEAM_ALPHA = 0.3;
+export const LASER_MOUNT_COLOR = 0xff2222;
+export const LASER_MOUNT_SIZE = 6;
+
+/** Pusher rendering */
+export const PUSHER_COLOR = 0x8888cc;
+export const PUSHER_SIZE = 8;
+
+/** Overlay rendering */
+export const FLAMER_COLOR = 0xff6600;
+export const CRUSHER_COLOR = 0x888888;
+export const OVERLAY_INDICATOR_SIZE = 6;
+
+/** Phase indicator */
+export const PHASE_DOT_COLOR = 0xf39c12;
+export const PHASE_DOT_SIZE = 3;
 
 /** Directional arrow symbols for conveyors */
 export const CONVEYOR_ARROWS = {
@@ -78,6 +135,9 @@ export const ROBOT_COLORS_HEX = [
   0xe67e22, // dark orange
   0xe84393, // pink
 ];
+
+/** Elevation indicator */
+export const ELEVATION_COLOR = 0xccaa44;
 
 /** Max scale factor for auto-fit */
 export const MAX_SCALE = 1.5;

@@ -5,6 +5,8 @@
   display: flex;
   flex-direction: column;
   gap: 1rem;
+  height: 100vh;
+  overflow: hidden;
 }
 
 .board-editor-header {
@@ -25,6 +27,9 @@
 .board-editor-body {
   display: flex;
   gap: 1.5rem;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
 }
 
 /* Toolbar (left) */
@@ -32,7 +37,11 @@
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
-  min-width: 120px;
+  width: 160px;
+  flex-shrink: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-right: 4px;
 }
 
 .editor-toolbar h4 {
@@ -95,6 +104,9 @@
   flex: 1;
   display: flex;
   justify-content: center;
+  align-items: flex-start;
+  overflow: auto;
+  min-width: 0;
 }
 
 .editor-grid {
@@ -170,10 +182,13 @@
 
 /* Sidebar (right) */
 .editor-sidebar {
-  min-width: 200px;
+  width: 220px;
+  flex-shrink: 0;
   display: flex;
   flex-direction: column;
   gap: 1rem;
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 
 .editor-sidebar label {
@@ -619,4 +634,148 @@
   color: rgba(204, 170, 68, 0.8);
   pointer-events: none;
   line-height: 1;
+}
+
+/* Custom scrollbars for panels */
+.editor-toolbar::-webkit-scrollbar,
+.editor-sidebar::-webkit-scrollbar,
+.editor-grid-wrapper::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+
+.editor-toolbar::-webkit-scrollbar-track,
+.editor-sidebar::-webkit-scrollbar-track,
+.editor-grid-wrapper::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.editor-toolbar::-webkit-scrollbar-thumb,
+.editor-sidebar::-webkit-scrollbar-thumb,
+.editor-grid-wrapper::-webkit-scrollbar-thumb {
+  background: #333;
+  border-radius: 3px;
+}
+
+.editor-toolbar::-webkit-scrollbar-thumb:hover,
+.editor-sidebar::-webkit-scrollbar-thumb:hover,
+.editor-grid-wrapper::-webkit-scrollbar-thumb:hover {
+  background: #555;
+}
+
+/* Inline element options */
+.element-item {
+  display: flex;
+  flex-direction: column;
+}
+
+.element-item.has-options .tool-btn.active {
+  border-radius: 0.4rem 0.4rem 0 0;
+  border-bottom-color: #7b2ff7;
+}
+
+/* Options wrapper — animates layout height via grid rows */
+.options-wrapper {
+  display: grid;
+  grid-template-rows: 1fr;
+}
+
+.options-wrapper > .element-options {
+  overflow: hidden;
+  min-height: 0;
+}
+
+@keyframes optionsExpand {
+  from { grid-template-rows: 0fr; opacity: 0; }
+  to   { grid-template-rows: 1fr; opacity: 1; }
+}
+
+@keyframes optionsCollapse {
+  from { grid-template-rows: 1fr; opacity: 1; }
+  to   { grid-template-rows: 0fr; opacity: 0; }
+}
+
+.options-wrapper.expanding {
+  animation: optionsExpand 0.15s ease-out;
+}
+
+.options-wrapper.collapsing {
+  animation: optionsCollapse 0.15s ease-in forwards;
+}
+
+.element-options {
+  padding: 0.4rem;
+  border: 2px solid #7b2ff7;
+  border-top: none;
+  border-radius: 0 0 0.4rem 0.4rem;
+  background: #1e1a30;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.element-options .option-label {
+  font-size: 0.65rem;
+  color: #888;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* Compact pickers inside inline options */
+.element-options .direction-picker {
+  gap: 1px;
+}
+
+.element-options .direction-picker button {
+  padding: 0.2rem;
+  font-size: 0.65rem;
+}
+
+.element-options .entry-picker {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2px;
+}
+
+.element-options .entry-btn {
+  padding: 0.15rem 0.3rem;
+  font-size: 0.65rem;
+}
+
+.element-options .phase-picker {
+  flex-wrap: wrap;
+}
+
+.element-options .phase-btn {
+  padding: 0.2rem 0.35rem;
+  font-size: 0.7rem;
+  min-width: 22px;
+}
+
+.element-options .strength-picker {
+  flex-wrap: wrap;
+}
+
+.element-options .strength-picker button {
+  padding: 0.2rem 0.45rem;
+  font-size: 0.7rem;
+}
+
+.element-options .group-picker {
+  flex-wrap: wrap;
+}
+
+.element-options .group-btn {
+  padding: 0.2rem 0.45rem;
+  font-size: 0.7rem;
+  min-width: 22px;
+}
+
+.element-options .blocks-picker {
+  flex-wrap: wrap;
+}
+
+.element-options .blocks-btn {
+  padding: 0.2rem 0.45rem;
+  font-size: 0.7rem;
 }

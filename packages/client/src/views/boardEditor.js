@@ -54,6 +54,7 @@ let saving = false;
 let error = '';
 let isDragging = false;
 let selectedCell = null; // {x, y} for tile info display
+let lastExpandedKey = null; // tracks which element's options are open for animation
 
 function initTiles() {
   tiles = [];
@@ -88,162 +89,245 @@ export function render(container, params) {
     initTiles();
   }
 
+  function renderElementOptions(key, category) {
+    // category: 'ground', 'sideFeature', 'overlay'
+    const directionHtml = `
+      <span class="option-label">Direction</span>
+      <div class="direction-picker">
+        <span class="spacer"></span>
+        <button class="${selectedDirection === 'north' ? 'active' : ''}" data-dir="north">\u2191 N</button>
+        <span class="spacer"></span>
+        <button class="${selectedDirection === 'west' ? 'active' : ''}" data-dir="west">\u2190 W</button>
+        <span class="spacer"></span>
+        <button class="${selectedDirection === 'east' ? 'active' : ''}" data-dir="east">\u2192 E</button>
+        <span class="spacer"></span>
+        <button class="${selectedDirection === 'south' ? 'active' : ''}" data-dir="south">\u2193 S</button>
+        <span class="spacer"></span>
+      </div>`;
+    const entryHtml = `
+      <span class="option-label">Entry Sides <span class="help-text">(curve/merge)</span></span>
+      <div class="entry-picker">
+        ${['north', 'south', 'east', 'west'].map((d) => `
+          <button class="entry-btn ${selectedEntry.includes(d) ? 'active' : ''}" data-entry="${d}">
+            ${ARROW_MAP[d]} ${d[0].toUpperCase()}
+          </button>
+        `).join('')}
+      </div>`;
+    const phaseHtml = `
+      <span class="option-label">Active Phases</span>
+      <div class="phase-picker">
+        ${[1, 2, 3, 4, 5].map((p) => `
+          <button class="phase-btn ${selectedPhases.includes(p) ? 'active' : ''}" data-phase="${p}">${p}</button>
+        `).join('')}
+      </div>`;
+    const strengthHtml = `
+      <span class="option-label">Laser Strength</span>
+      <div class="strength-picker">
+        ${[1, 2, 3].map((s) => `
+          <button class="${selectedStrength === s ? 'active' : ''}" data-strength="${s}">${s}</button>
+        `).join('')}
+      </div>`;
+    const groupHtml = `
+      <span class="option-label">Portal Group</span>
+      <div class="group-picker">
+        ${PORTAL_GROUPS.map((g) => `
+          <button class="group-btn ${selectedGroup === g ? 'active' : ''}" data-group="${g}">${g}</button>
+        `).join('')}
+      </div>`;
+
+    if (category === 'ground') {
+      if (key === 'conveyor' || key === 'express_conveyor') return directionHtml + entryHtml;
+      if (key === 'current' || key === 'ramp') return directionHtml;
+      if (key === 'trap_pit') return phaseHtml;
+      if (key === 'portal') return groupHtml;
+    }
+    if (category === 'sideFeature') {
+      if (key === 'laser') return strengthHtml + phaseHtml;
+      if (key === 'pusher') return phaseHtml;
+    }
+    if (category === 'overlay') {
+      if (key === 'flamer' || key === 'crusher') return phaseHtml;
+    }
+    return '';
+  }
+
   function update() {
     const canSave = boardName.length >= BOARD.NAME_MIN_LENGTH && !saving;
     const hasContent = tiles.some((row) => row.some((t) => t.type !== 'floor' || t.sideFeatures?.length || t.overlays?.length));
     const isGroundMode = !wallMode && !oneWayWallMode && !selectedSideFeature && !selectedOverlay;
     const isSideFeatureMode = !!selectedSideFeature && !wallMode && !oneWayWallMode;
     const isOverlayMode = !!selectedOverlay && !wallMode && !oneWayWallMode;
-    const needsDirection = isGroundMode && ['conveyor', 'express_conveyor', 'current', 'ramp'].includes(selectedTool);
 
-    // Determine if current tool needs phase selector
-    const needsPhases = (isSideFeatureMode && PHASE_ELEMENTS.has(selectedSideFeature))
-      || (isOverlayMode && PHASE_ELEMENTS.has(selectedOverlay))
-      || (isGroundMode && PHASE_ELEMENTS.has(selectedTool));
+    // Determine which element panel is currently expanded
+    let currentExpandedKey = null;
+    if (oneWayWallMode) {
+      currentExpandedKey = 'tool:oneway';
+    } else if (isGroundMode && renderElementOptions(selectedTool, 'ground')) {
+      currentExpandedKey = `ground:${selectedTool}`;
+    } else if (isSideFeatureMode && renderElementOptions(selectedSideFeature, 'sideFeature')) {
+      currentExpandedKey = `sf:${selectedSideFeature}`;
+    } else if (isOverlayMode && renderElementOptions(selectedOverlay, 'overlay')) {
+      currentExpandedKey = `ov:${selectedOverlay}`;
+    }
+
+    const isNewExpansion = currentExpandedKey !== null && currentExpandedKey !== lastExpandedKey;
+    const isCollapsing = lastExpandedKey !== null && lastExpandedKey !== currentExpandedKey;
+
+    // Capture old panel content before re-render for simultaneous collapse
+    let collapseInfo = null;
+    if (isCollapsing) {
+      const oldWrapper = container.querySelector('.options-wrapper');
+      if (oldWrapper) {
+        collapseInfo = { key: lastExpandedKey, html: oldWrapper.innerHTML };
+      }
+    }
+
+    lastExpandedKey = currentExpandedKey;
+    const wrapperAnim = isNewExpansion ? ' expanding' : '';
+
+    // Save toolbar scroll position before re-render
+    const toolbar = container.querySelector('.editor-toolbar');
+    const prevScroll = toolbar ? toolbar.scrollTop : 0;
 
     container.innerHTML = `
-      <div class="board-editor">
-        <div class="board-editor-header">
-          <h2>${boardId ? 'Edit Board' : 'New Board'}</h2>
-          <div class="actions">
-            <a href="/boards" data-link class="btn btn-secondary">Back</a>
-            <button class="btn" id="save-btn" ${!canSave ? 'disabled' : ''}>${saving ? 'Saving...' : 'Save'}</button>
+        <div class="board-editor">
+          <div class="board-editor-header">
+            <h2>${boardId ? 'Edit Board' : 'New Board'}</h2>
+            <div class="actions">
+              <a href="/boards" data-link class="btn btn-secondary">Back</a>
+              <button class="btn" id="save-btn" ${!canSave ? 'disabled' : ''}>${saving ? 'Saving...' : 'Save'}</button>
+            </div>
           </div>
-        </div>
 
-        ${error ? `<p class="error">${error}</p>` : ''}
+          ${error ? `<p class="error">${error}</p>` : ''}
 
-        <div class="board-editor-body">
-          <div class="editor-toolbar">
-            <h4>Tiles</h4>
-            ${BOARD.TILE_TYPES.map((t) => `
-              <button class="tool-btn ${selectedTool === t && isGroundMode ? 'active' : ''}" data-tool="${t}">
-                ${TYPE_LABELS[t] || t}
-              </button>
-            `).join('')}
-
-            <h4>Side Features</h4>
-            ${BOARD.SIDE_FEATURE_TYPES.map((t) => `
-              <button class="tool-btn ${selectedSideFeature === t ? 'active' : ''}" data-side-feature="${t}">
-                ${SIDE_FEATURE_LABELS[t] || t}
-              </button>
-            `).join('')}
-
-            <h4>Overlays</h4>
-            ${BOARD.OVERLAY_TYPES.map((t) => `
-              <button class="tool-btn ${selectedOverlay === t ? 'active' : ''}" data-overlay="${t}">
-                ${OVERLAY_LABELS[t] || t}
-              </button>
-            `).join('')}
-
-            <h4>Tools</h4>
-            <button class="tool-btn ${wallMode ? 'active' : ''}" id="wall-mode-btn">Wall Mode</button>
-            <button class="tool-btn ${oneWayWallMode ? 'active' : ''}" id="oneway-wall-mode-btn">One-Way Wall</button>
-            <button class="tool-btn" id="eraser-btn">Eraser</button>
-            <button class="tool-btn" id="clear-btn">Clear All</button>
-
-            ${oneWayWallMode ? `
-              <h4>Blocks</h4>
-              <div class="blocks-picker">
-                <button class="blocks-btn ${selectedBlocks === 'entry' ? 'active' : ''}" data-blocks="entry">Entry</button>
-                <button class="blocks-btn ${selectedBlocks === 'exit' ? 'active' : ''}" data-blocks="exit">Exit</button>
-              </div>
-            ` : ''}
-
-            ${needsDirection ? `
-              <h4>Direction</h4>
-              <div class="direction-picker">
-                <span class="spacer"></span>
-                <button class="${selectedDirection === 'north' ? 'active' : ''}" data-dir="north">\u2191 N</button>
-                <span class="spacer"></span>
-                <button class="${selectedDirection === 'west' ? 'active' : ''}" data-dir="west">\u2190 W</button>
-                <span class="spacer"></span>
-                <button class="${selectedDirection === 'east' ? 'active' : ''}" data-dir="east">\u2192 E</button>
-                <span class="spacer"></span>
-                <button class="${selectedDirection === 'south' ? 'active' : ''}" data-dir="south">\u2193 S</button>
-                <span class="spacer"></span>
-              </div>
-            ` : ''}
-
-            ${needsDirection ? `
-              <h4>Entry Sides <span class="help-text">(curve/merge)</span></h4>
-              <div class="entry-picker">
-                ${['north', 'south', 'east', 'west'].map((d) => `
-                  <button class="entry-btn ${selectedEntry.includes(d) ? 'active' : ''}" data-entry="${d}">
-                    ${ARROW_MAP[d]} ${d[0].toUpperCase()}
+          <div class="board-editor-body">
+            <div class="editor-toolbar">
+              <h4>Board Elements</h4>
+              ${BOARD.TILE_TYPES.map((t) => {
+                const isActive = selectedTool === t && isGroundMode;
+                const opts = isActive ? renderElementOptions(t, 'ground') : '';
+                return `<div class="element-item${opts ? ' has-options' : ''}">
+                  <button class="tool-btn ${isActive ? 'active' : ''}" data-tool="${t}">
+                    ${TYPE_LABELS[t] || t}
                   </button>
-                `).join('')}
-              </div>
-            ` : ''}
+                  ${opts ? `<div class="options-wrapper${wrapperAnim}"><div class="element-options">${opts}</div></div>` : ''}
+                </div>`;
+              }).join('')}
 
-            ${isSideFeatureMode && selectedSideFeature === 'laser' ? `
-              <h4>Laser Strength</h4>
-              <div class="strength-picker">
-                ${[1, 2, 3].map((s) => `
-                  <button class="${selectedStrength === s ? 'active' : ''}" data-strength="${s}">${s}</button>
-                `).join('')}
-              </div>
-            ` : ''}
+              <h4>Side Features</h4>
+              ${BOARD.SIDE_FEATURE_TYPES.map((t) => {
+                const isActive = selectedSideFeature === t;
+                const opts = isActive ? renderElementOptions(t, 'sideFeature') : '';
+                return `<div class="element-item${opts ? ' has-options' : ''}">
+                  <button class="tool-btn ${isActive ? 'active' : ''}" data-side-feature="${t}">
+                    ${SIDE_FEATURE_LABELS[t] || t}
+                  </button>
+                  ${opts ? `<div class="options-wrapper${wrapperAnim}"><div class="element-options">${opts}</div></div>` : ''}
+                </div>`;
+              }).join('')}
 
-            ${needsPhases ? `
-              <h4>Active Phases</h4>
-              <div class="phase-picker">
-                ${[1, 2, 3, 4, 5].map((p) => `
-                  <button class="phase-btn ${selectedPhases.includes(p) ? 'active' : ''}" data-phase="${p}">${p}</button>
-                `).join('')}
-              </div>
-            ` : ''}
+              <h4>Overlays</h4>
+              ${BOARD.OVERLAY_TYPES.map((t) => {
+                const isActive = selectedOverlay === t;
+                const opts = isActive ? renderElementOptions(t, 'overlay') : '';
+                return `<div class="element-item${opts ? ' has-options' : ''}">
+                  <button class="tool-btn ${isActive ? 'active' : ''}" data-overlay="${t}">
+                    ${OVERLAY_LABELS[t] || t}
+                  </button>
+                  ${opts ? `<div class="options-wrapper${wrapperAnim}"><div class="element-options">${opts}</div></div>` : ''}
+                </div>`;
+              }).join('')}
 
-            ${isGroundMode && selectedTool === 'portal' ? `
-              <h4>Portal Group</h4>
-              <div class="group-picker">
-                ${PORTAL_GROUPS.map((g) => `
-                  <button class="group-btn ${selectedGroup === g ? 'active' : ''}" data-group="${g}">${g}</button>
-                `).join('')}
+              <h4>Tools</h4>
+              <button class="tool-btn ${wallMode ? 'active' : ''}" id="wall-mode-btn">Wall Mode</button>
+              <div class="element-item${oneWayWallMode ? ' has-options' : ''}">
+                <button class="tool-btn ${oneWayWallMode ? 'active' : ''}" id="oneway-wall-mode-btn">One-Way Wall</button>
+                ${oneWayWallMode ? `
+                  <div class="options-wrapper${wrapperAnim}">
+                    <div class="element-options">
+                      <span class="option-label">Blocks</span>
+                      <div class="blocks-picker">
+                        <button class="blocks-btn ${selectedBlocks === 'entry' ? 'active' : ''}" data-blocks="entry">Entry</button>
+                        <button class="blocks-btn ${selectedBlocks === 'exit' ? 'active' : ''}" data-blocks="exit">Exit</button>
+                      </div>
+                    </div>
+                  </div>
+                ` : ''}
               </div>
-            ` : ''}
+              <button class="tool-btn" id="eraser-btn">Eraser</button>
+              <button class="tool-btn" id="clear-btn">Clear All</button>
 
-            ${isGroundMode ? `
-              <h4>Elevation</h4>
-              <div class="elevation-picker">
-                ${[0, 1, 2].map((e) => `
-                  <button class="elevation-btn ${selectedElevation === e ? 'active' : ''}" data-elevation="${e}">${e}</button>
-                `).join('')}
-              </div>
-            ` : ''}
-          </div>
-
-          <div class="editor-grid-wrapper">
-            <div class="editor-grid" id="editor-grid">
-              ${tiles.map((row, y) => row.map((tile, x) => renderCell(tile, x, y)).join('')).join('')}
+              ${isGroundMode ? `
+                <h4>Elevation</h4>
+                <div class="elevation-picker">
+                  ${[0, 1, 2].map((e) => `
+                    <button class="elevation-btn ${selectedElevation === e ? 'active' : ''}" data-elevation="${e}">${e}</button>
+                  `).join('')}
+                </div>
+              ` : ''}
             </div>
-          </div>
 
-          <div class="editor-sidebar">
-            <label>
-              Name
-              <input type="text" id="board-name" value="${escapeAttr(boardName)}"
-                maxlength="${BOARD.NAME_MAX_LENGTH}" placeholder="Board name" />
-            </label>
-            <label>
-              Description
-              <textarea id="board-desc" maxlength="${BOARD.DESCRIPTION_MAX_LENGTH}"
-                placeholder="Optional description">${escapeHtml(boardDescription)}</textarea>
-            </label>
-            <div class="checklist">
-              <div class="${boardName.length >= BOARD.NAME_MIN_LENGTH ? 'ok' : 'fail'}">
-                ${boardName.length >= BOARD.NAME_MIN_LENGTH ? '\u2713' : '\u2717'} Name (${BOARD.NAME_MIN_LENGTH}+ chars)
-              </div>
-              <div class="${hasContent ? 'ok' : 'fail'}">
-                ${hasContent ? '\u2713' : '\u2717'} Has non-floor tiles
+            <div class="editor-grid-wrapper">
+              <div class="editor-grid" id="editor-grid">
+                ${tiles.map((row, y) => row.map((tile, x) => renderCell(tile, x, y)).join('')).join('')}
               </div>
             </div>
 
-            ${selectedCell ? renderTileInfo(selectedCell.x, selectedCell.y) : ''}
+            <div class="editor-sidebar">
+              <label>
+                Name
+                <input type="text" id="board-name" value="${escapeAttr(boardName)}"
+                  maxlength="${BOARD.NAME_MAX_LENGTH}" placeholder="Board name" />
+              </label>
+              <label>
+                Description
+                <textarea id="board-desc" maxlength="${BOARD.DESCRIPTION_MAX_LENGTH}"
+                  placeholder="Optional description">${escapeHtml(boardDescription)}</textarea>
+              </label>
+              <div class="checklist">
+                <div class="${boardName.length >= BOARD.NAME_MIN_LENGTH ? 'ok' : 'fail'}">
+                  ${boardName.length >= BOARD.NAME_MIN_LENGTH ? '\u2713' : '\u2717'} Name (${BOARD.NAME_MIN_LENGTH}+ chars)
+                </div>
+                <div class="${hasContent ? 'ok' : 'fail'}">
+                  ${hasContent ? '\u2713' : '\u2717'} Has non-floor tiles
+                </div>
+              </div>
+
+              ${selectedCell ? renderTileInfo(selectedCell.x, selectedCell.y) : ''}
+            </div>
           </div>
         </div>
-      </div>
-    `;
+      `;
+
+    // Inject collapsing wrapper at the old element's position (simultaneous with expand)
+    if (collapseInfo) {
+      const [cat, key] = collapseInfo.key.split(':');
+      let targetBtn = null;
+      if (cat === 'ground') targetBtn = container.querySelector(`[data-tool="${key}"]`);
+      else if (cat === 'sf') targetBtn = container.querySelector(`[data-side-feature="${key}"]`);
+      else if (cat === 'ov') targetBtn = container.querySelector(`[data-overlay="${key}"]`);
+      else if (cat === 'tool') targetBtn = container.querySelector('#oneway-wall-mode-btn');
+
+      const elementItem = targetBtn?.closest('.element-item');
+      if (elementItem) {
+        const collapsingWrapper = document.createElement('div');
+        collapsingWrapper.className = 'options-wrapper collapsing';
+        collapsingWrapper.innerHTML = collapseInfo.html;
+        collapsingWrapper.addEventListener('animationend', () => collapsingWrapper.remove());
+        elementItem.appendChild(collapsingWrapper);
+      }
+    }
+
+    // Restore toolbar scroll position and scroll expanded options into view
+    const newToolbar = container.querySelector('.editor-toolbar');
+    if (newToolbar) {
+      newToolbar.scrollTop = prevScroll;
+      const expandedOpts = newToolbar.querySelector('.options-wrapper:not(.collapsing)');
+      if (expandedOpts) {
+        expandedOpts.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      }
+    }
 
     attachListeners();
   }
@@ -810,6 +894,7 @@ export function unmount() {
   selectedOverlay = null;
   selectedEntry = [];
   selectedElevation = 0;
+  lastExpandedKey = null;
 }
 
 function escapeHtml(s) {

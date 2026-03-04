@@ -4,7 +4,6 @@
   "features": {
     "ghcr.io/devcontainers/features/git:1": {},
     "ghcr.io/devcontainers/features/github-cli:1": {},
-    "ghcr.io/anthropics/devcontainer-features/claude-code:1": {},
     "ghcr.io/devcontainers/features/node:1": {
       "version": "20",
       "nodeGypDependencies": true
@@ -25,7 +24,6 @@
         "github.vscode-pull-request-github",
         "dbaeumer.vscode-eslint",
         "esbenp.prettier-vscode",
-
         "ckolkman.vscode-postgres"
       ],
       "settings": {
@@ -52,6 +50,6 @@
       "onAutoForward": "silent"
     }
   },
-  "postCreateCommand": "npm install -g pnpm && cd /workspaces/mechmarathon && pnpm install",
+  "postCreateCommand": "curl -fsSL https://claude.ai/install.sh | bash && npm install -g pnpm && pnpm install",
   "remoteUser": "vscode"
 }

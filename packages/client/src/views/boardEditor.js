@@ -2,6 +2,8 @@ import '../styles/board-editor.css';
 import { BOARD } from '@mechmarathon/shared';
 import { api } from '../lib/api.js';
 import { navigateTo } from '../lib/router.js';
+import * as history from '../lib/editor/history.js';
+import * as shortcuts from '../lib/editor/shortcuts.js';
 
 const ARROW_MAP = { north: '\u2191', south: '\u2193', east: '\u2192', west: '\u2190' };
 const SYMBOL_MAP = {
@@ -55,6 +57,7 @@ let error = '';
 let isDragging = false;
 let selectedCell = null; // {x, y} for tile info display
 let lastExpandedKey = null; // tracks which element's options are open for animation
+let showShortcutsHelp = false;
 
 function initTiles() {
   tiles = [];
@@ -67,10 +70,27 @@ function initTiles() {
   }
 }
 
+function performUndo() {
+  const restored = history.undo(tiles);
+  if (restored) {
+    tiles = restored;
+    update();
+  }
+}
+
+function performRedo() {
+  const restored = history.redo(tiles);
+  if (restored) {
+    tiles = restored;
+    update();
+  }
+}
+
 export function render(container, params) {
   boardId = params?.id || null;
   error = '';
   saving = false;
+  history.clear();
 
   if (boardId) {
     api(`/api/boards/${boardId}`).then((board) => {
@@ -149,6 +169,20 @@ export function render(container, params) {
       if (key === 'flamer' || key === 'crusher') return phaseHtml;
     }
     return '';
+  }
+
+  function renderShortcutsHelp() {
+    const groups = shortcuts.getShortcuts();
+    let html = '<div class="shortcuts-help">';
+    for (const [category, items] of Object.entries(groups)) {
+      html += `<div class="shortcuts-category"><h5>${category}</h5>`;
+      for (const item of items) {
+        html += `<div class="shortcut-row"><kbd>${item.key}</kbd><span>${item.description}</span></div>`;
+      }
+      html += '</div>';
+    }
+    html += '</div>';
+    return html;
   }
 
   function update() {
@@ -240,7 +274,11 @@ export function render(container, params) {
               }).join('')}
 
               <h4>Tools</h4>
-              <button class="tool-btn ${wallMode ? 'active' : ''}" id="wall-mode-btn">Wall Mode</button>
+              <div class="undo-redo-row">
+                <button class="tool-btn undo-btn" id="undo-btn" ${!history.canUndo() ? 'disabled' : ''} title="Undo (Ctrl+Z)">Undo</button>
+                <button class="tool-btn redo-btn" id="redo-btn" ${!history.canRedo() ? 'disabled' : ''} title="Redo (Ctrl+Shift+Z)">Redo</button>
+              </div>
+              <button class="tool-btn ${wallMode ? 'active' : ''}" id="wall-mode-btn">Wall Mode <kbd>W</kbd></button>
               <div class="element-item${oneWayWallMode ? ' has-options' : ''}">
                 <button class="tool-btn ${oneWayWallMode ? 'active' : ''}" id="oneway-wall-mode-btn">One-Way Wall</button>
                 ${oneWayWallMode ? `
@@ -255,8 +293,10 @@ export function render(container, params) {
                   </div>
                 ` : ''}
               </div>
-              <button class="tool-btn" id="eraser-btn">Eraser</button>
+              <button class="tool-btn" id="eraser-btn">Eraser <kbd>E</kbd></button>
               <button class="tool-btn" id="clear-btn">Clear All</button>
+              <button class="tool-btn" id="shortcuts-help-btn">${showShortcutsHelp ? 'Hide' : 'Show'} Shortcuts <kbd>?</kbd></button>
+              ${showShortcutsHelp ? renderShortcutsHelp() : ''}
 
               ${isGroundMode ? `
                 <h4>Elevation</h4>
@@ -463,6 +503,16 @@ export function render(container, params) {
       });
     });
 
+    // Undo/Redo
+    container.querySelector('#undo-btn')?.addEventListener('click', performUndo);
+    container.querySelector('#redo-btn')?.addEventListener('click', performRedo);
+
+    // Shortcuts help toggle
+    container.querySelector('#shortcuts-help-btn')?.addEventListener('click', () => {
+      showShortcutsHelp = !showShortcutsHelp;
+      update();
+    });
+
     // Eraser
     container.querySelector('#eraser-btn')?.addEventListener('click', () => {
       selectedTool = 'floor';
@@ -476,6 +526,7 @@ export function render(container, params) {
 
     // Clear all
     container.querySelector('#clear-btn')?.addEventListener('click', () => {
+      history.push(tiles);
       initTiles();
       selectedCell = null;
       update();
@@ -545,6 +596,7 @@ export function render(container, params) {
     // Remove one-way wall buttons in tile info
     container.querySelectorAll('.btn-remove-ow').forEach((btn) => {
       btn.addEventListener('click', () => {
+        history.push(tiles);
         const x = parseInt(btn.dataset.owX);
         const y = parseInt(btn.dataset.owY);
         const side = btn.dataset.owSide;
@@ -560,6 +612,7 @@ export function render(container, params) {
     // Remove side feature buttons in tile info
     container.querySelectorAll('.btn-remove-sf').forEach((btn) => {
       btn.addEventListener('click', () => {
+        history.push(tiles);
         const x = parseInt(btn.dataset.sfX);
         const y = parseInt(btn.dataset.sfY);
         const side = btn.dataset.sfSide;
@@ -576,6 +629,7 @@ export function render(container, params) {
     // Remove overlay buttons in tile info
     container.querySelectorAll('.btn-remove-overlay').forEach((btn) => {
       btn.addEventListener('click', () => {
+        history.push(tiles);
         const x = parseInt(btn.dataset.ovX);
         const y = parseInt(btn.dataset.ovY);
         const type = btn.dataset.ovType;
@@ -607,6 +661,7 @@ export function render(container, params) {
       const cell = e.target.closest('.editor-cell');
       if (!cell) return;
       isDragging = true;
+      history.push(tiles);
       handleCellInteraction(cell, e);
     });
 
@@ -880,6 +935,63 @@ export function render(container, params) {
     }
   }
 
+  // Register keyboard shortcuts
+  shortcuts.unregisterAll();
+
+  shortcuts.register('ctrl+z', performUndo, 'Undo', 'Editing');
+  shortcuts.register('ctrl+shift+z', performRedo, 'Redo', 'Editing');
+  shortcuts.register('Escape', () => {
+    selectedTool = 'floor';
+    selectedSideFeature = null;
+    selectedOverlay = null;
+    wallMode = false;
+    oneWayWallMode = false;
+    selectedEntry = [];
+    update();
+  }, 'Deselect tool', 'Editing');
+  shortcuts.register('w', () => {
+    wallMode = !wallMode;
+    oneWayWallMode = false;
+    selectedSideFeature = null;
+    selectedOverlay = null;
+    update();
+  }, 'Wall mode', 'Tools');
+  shortcuts.register('e', () => {
+    selectedTool = 'floor';
+    selectedSideFeature = null;
+    selectedOverlay = null;
+    wallMode = false;
+    oneWayWallMode = false;
+    selectedEntry = [];
+    update();
+  }, 'Eraser', 'Tools');
+
+  // Arrow keys for direction picker
+  shortcuts.register('ArrowUp', () => { selectedDirection = 'north'; update(); }, 'Direction: North', 'Direction');
+  shortcuts.register('ArrowDown', () => { selectedDirection = 'south'; update(); }, 'Direction: South', 'Direction');
+  shortcuts.register('ArrowRight', () => { selectedDirection = 'east'; update(); }, 'Direction: East', 'Direction');
+  shortcuts.register('ArrowLeft', () => { selectedDirection = 'west'; update(); }, 'Direction: West', 'Direction');
+
+  // Number keys for quick tile selection (1-9 maps to TILE_TYPES by toolbar order)
+  const tileKeys = BOARD.TILE_TYPES.slice(0, 9);
+  tileKeys.forEach((t, i) => {
+    shortcuts.register(String(i + 1), () => {
+      selectedTool = t;
+      selectedSideFeature = null;
+      selectedOverlay = null;
+      wallMode = false;
+      oneWayWallMode = false;
+      selectedEntry = [];
+      update();
+    }, TYPE_LABELS[t] || t, 'Tile Types');
+  });
+
+  // Toggle shortcuts help panel
+  shortcuts.register('shift+?', () => {
+    showShortcutsHelp = !showShortcutsHelp;
+    update();
+  }, 'Toggle shortcuts help', 'Other');
+
   update();
 }
 
@@ -895,6 +1007,9 @@ export function unmount() {
   selectedEntry = [];
   selectedElevation = 0;
   lastExpandedKey = null;
+  showShortcutsHelp = false;
+  history.clear();
+  shortcuts.unregisterAll();
 }
 
 function escapeHtml(s) {

@@ -66,6 +66,12 @@ mechmarathon/
 - Unit test game logic in `shared` package (card execution, board mechanics)
 - Unit test API routes and socket handlers in `server`
 - Run all tests: `pnpm test`
+- **Test-driven development**: Tests define correct behavior based on stated requirements, NOT based on current implementation. When writing or updating tests:
+  - Define expected behavior from RoboRally rules and project requirements first
+  - If implementation doesn't match expected behavior, flag the discrepancy — do NOT silently adjust tests to match the implementation
+  - Ask questions or make suggestions when requirements are ambiguous or when implementation seems incorrect
+  - Never auto-update a failing test to match implementation without explicit user approval
+  - This is especially important for game state interactions (robots, options, board elements) where unexpected edge cases arise
 
 ### Git Workflow
 - `main` branch is the primary branch
@@ -144,8 +150,19 @@ pnpm --filter @mechmarathon/server add <package>
   - Seed script for default "Factory Floor" board
   - New socket events: `LOBBY_MAP_CONFIG`, `LOBBY_MAP_UPDATE`
 
+### Infrastructure Checklist
+- [x] Vitest configuration (`packages/shared/vitest.config.js`, globals enabled)
+- [x] Test helpers (`packages/shared/src/game/__tests__/helpers.js`)
+- [x] Foundation tests: movement, deck, board, options (104 tests)
+- [x] Core execution tests: 88 tests (executeCard, moveRobot, push, conveyors, gears, pushers, crushers, flamers, lasers, checkpoints, repair, radiation, death/respawn, register execution, win condition, virtual status)
+- [ ] Board editor undo/redo + keyboard shortcuts
+- [ ] Graphics abstraction layer (tile renderer registry)
+
 ### Next Steps
-- [ ] Add unit tests for shared game logic
+- [x] Session 2: Core execution tests (executeCard, moveRobot, push mechanics, death/respawn, register execution)
+- [ ] Session 3: Undo/redo system + keyboard shortcut framework for board editor
+- [ ] Session 4: Graphics abstraction layer (tile renderer registry, enhanced renderers)
+- [ ] Review all execution tests for correctness against RoboRally rules (known issue: push-off-board should let pusher advance; other tests may also match implementation rather than correct behavior)
+- [ ] Per-element systematic review: TDD approach — define correct behavior tests first, then fix implementation to match
 - [ ] Implement reputation updates on game completion
 - [ ] Create the 59 official RoboRally board definitions
-- [ ] Board editor enhancements (undo/redo, copy/paste regions, import/export)

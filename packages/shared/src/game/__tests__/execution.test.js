@@ -100,6 +100,26 @@ describe('executeCard', () => {
     executeCard(card, robot, [robot], board, 1);
     expect(robot.position).toEqual({ x: 5, y: 2 });
   });
+
+  it('move2 on teleporter triples to 6 steps', () => {
+    const board = createTestBoard();
+    setTile(board, 5, 8, { type: 'teleporter' });
+    const robot = createTestRobot({ direction: 'north', position: { x: 5, y: 8 } });
+    const card = { id: 'c2', type: 'move2', priority: 200 };
+    executeCard(card, robot, [robot], board, 1);
+    // 2 * 3 = 6 steps north: y goes from 8 to 2
+    expect(robot.position).toEqual({ x: 5, y: 2 });
+  });
+
+  it('backup on teleporter triples to 3 steps backward', () => {
+    const board = createTestBoard();
+    setTile(board, 5, 3, { type: 'teleporter' });
+    const robot = createTestRobot({ direction: 'north', position: { x: 5, y: 3 } });
+    const card = { id: 'c3', type: 'backup', priority: 50 };
+    executeCard(card, robot, [robot], board, 1);
+    // Backup (-1) * 3 = 3 steps south: y goes from 3 to 6
+    expect(robot.position).toEqual({ x: 5, y: 6 });
+  });
 });
 
 // --- moveRobot ---
@@ -220,6 +240,24 @@ describe('moveRobot', () => {
     expect(robot.position).toEqual({ x: 5, y: 5 });
   });
 
+  it('move2 on water reduces to 1 step', () => {
+    const board = createTestBoard();
+    setTile(board, 5, 5, { type: 'water' });
+    const robot = createTestRobot({ direction: 'north', position: { x: 5, y: 5 } });
+    moveRobot(robot, 2, [robot], board, 1);
+    // Water reduces absSteps from 2 to 1 — moves 1 step north
+    expect(robot.position).toEqual({ x: 5, y: 4 });
+  });
+
+  it('backup on water reduces to 0 steps', () => {
+    const board = createTestBoard();
+    setTile(board, 5, 5, { type: 'water' });
+    const robot = createTestRobot({ direction: 'north', position: { x: 5, y: 5 } });
+    moveRobot(robot, -1, [robot], board, 1);
+    // Backup is -1, absSteps = 1, water reduces to 0 — no movement
+    expect(robot.position).toEqual({ x: 5, y: 5 });
+  });
+
   it('ramp costs an extra movement step going up', () => {
     const board = createTestBoard();
     setTile(board, 5, 5, { type: 'floor', elevation: 0 });
@@ -313,6 +351,41 @@ describe('repulsor', () => {
     moveRobot(robot, 1, [robot], board, 1);
     expect(robot.position).toEqual({ x: 5, y: 5 });
   });
+
+  it('bounce generates repulsor bounce event', () => {
+    const board = createTestBoard();
+    setTile(board, 5, 4, { type: 'repulsor' });
+    const robot = createTestRobot({ direction: 'north', position: { x: 5, y: 5 } });
+    const events = moveRobot(robot, 1, [robot], board, 1);
+    // Should have: move to repulsor, then bounce move back
+    const bounceEvent = events.find((e) => e.details === 'repulsor bounce');
+    expect(bounceEvent).toBeDefined();
+    expect(bounceEvent.from).toEqual({ x: 5, y: 4 });
+    expect(bounceEvent.to).toEqual({ x: 5, y: 5 });
+  });
+
+  it('repulsor at board edge — bounce out of bounds, robot stays on repulsor', () => {
+    const board = createTestBoard();
+    // Repulsor at top edge, robot approaches from south
+    setTile(board, 5, 0, { type: 'repulsor' });
+    const robot = createTestRobot({ direction: 'north', position: { x: 5, y: 1 } });
+    moveRobot(robot, 1, [robot], board, 1);
+    // Bounce direction is south, but bounceDest = (5, -1) — out of bounds check fails
+    // Actually bounceDest = dest + bounceDir delta = (5,0) + south = (5,1) which IS in bounds
+    // So robot bounces back to (5,1)
+    expect(robot.position).toEqual({ x: 5, y: 1 });
+  });
+
+  it('move2 onto repulsor — robot bounces back each step', () => {
+    const board = createTestBoard();
+    setTile(board, 5, 4, { type: 'repulsor' });
+    const robot = createTestRobot({ direction: 'north', position: { x: 5, y: 5 } });
+    moveRobot(robot, 2, [robot], board, 1);
+    // Step 1: move to (5,4) repulsor → bounce back to (5,5)
+    // Step 2: move to (5,4) repulsor → bounce back to (5,5)
+    expect(robot.position).toEqual({ x: 5, y: 5 });
+    expect(robot.health).toBe(GAME.STARTING_HEALTH);
+  });
 });
 
 // --- Oil slick sliding ---
@@ -335,6 +408,40 @@ describe('oil slick sliding', () => {
     moveRobot(robot, 1, [robot], board, 1);
     expect(robot.health).toBe(0);
   });
+
+  it('slide into pit — robot dies', () => {
+    const board = createTestBoard();
+    setTile(board, 5, 4, { type: 'oil_slick' });
+    setTile(board, 5, 3, { type: 'pit' });
+    const robot = createTestRobot({ direction: 'north', position: { x: 5, y: 5 } });
+    moveRobot(robot, 1, [robot], board, 1);
+    // Moves to (5,4) oil slick, slides to (5,3) pit → death
+    expect(robot.health).toBe(0);
+    expect(robot.lives).toBe(GAME.STARTING_LIVES - 1);
+  });
+
+  it('slide blocked by wall — robot stops', () => {
+    const board = createTestBoard();
+    setTile(board, 5, 4, { type: 'oil_slick' });
+    setTile(board, 5, 3, { type: 'oil_slick', walls: ['north'] });
+    const robot = createTestRobot({ direction: 'north', position: { x: 5, y: 5 } });
+    moveRobot(robot, 1, [robot], board, 1);
+    // Slides through (5,4) to (5,3), wall blocks further slide north
+    expect(robot.position).toEqual({ x: 5, y: 3 });
+    expect(robot.health).toBe(GAME.STARTING_HEALTH);
+  });
+
+  it('slide blocked by another robot — robot stops', () => {
+    const board = createTestBoard();
+    setTile(board, 5, 4, { type: 'oil_slick' });
+    setTile(board, 5, 3, { type: 'oil_slick' });
+    const robot = createTestRobot({ id: 'slider', direction: 'north', position: { x: 5, y: 5 } });
+    const blocker = createTestRobot({ id: 'blocker', direction: 'east', position: { x: 5, y: 3 } });
+    moveRobot(robot, 1, [robot, blocker], board, 1);
+    // Moves to (5,4) oil slick, tries to slide to (5,3) but blocker is there → stops at (5,4)
+    expect(robot.position).toEqual({ x: 5, y: 4 });
+    expect(blocker.position).toEqual({ x: 5, y: 3 });
+  });
 });
 
 // --- Portal ---
@@ -347,6 +454,42 @@ describe('portal', () => {
     const robot = createTestRobot({ direction: 'north', position: { x: 5, y: 5 } });
     moveRobot(robot, 1, [robot], board, 1);
     expect(robot.position).toEqual({ x: 8, y: 8 });
+  });
+
+  it('portal generates portal event with correct group details', () => {
+    const board = createTestBoard();
+    setTile(board, 5, 4, { type: 'portal', group: 'D' });
+    setTile(board, 2, 2, { type: 'portal', group: 'D' });
+    const robot = createTestRobot({ direction: 'north', position: { x: 5, y: 5 } });
+    const events = moveRobot(robot, 1, [robot], board, 1);
+    const portalEvent = events.find((e) => e.type === 'portal');
+    expect(portalEvent).toBeDefined();
+    expect(portalEvent.from).toEqual({ x: 5, y: 4 });
+    expect(portalEvent.to).toEqual({ x: 2, y: 2 });
+    expect(portalEvent.details).toContain('D');
+  });
+
+  it('no matching portal — robot stays on entry portal', () => {
+    const board = createTestBoard();
+    setTile(board, 5, 4, { type: 'portal', group: 'X' });
+    // No other portal with group 'X' exists
+    const robot = createTestRobot({ direction: 'north', position: { x: 5, y: 5 } });
+    moveRobot(robot, 1, [robot], board, 1);
+    // findMatchingPortal returns null, robot stays at entry portal
+    expect(robot.position).toEqual({ x: 5, y: 4 });
+  });
+
+  it('portal preserves robot direction', () => {
+    const board = createTestBoard();
+    setTile(board, 5, 4, { type: 'portal', group: 'C' });
+    setTile(board, 8, 8, { type: 'portal', group: 'C' });
+    const robot = createTestRobot({ direction: 'west', position: { x: 5, y: 5 } });
+    // Move north (not west — we want to check direction is preserved, not changed)
+    robot.direction = 'north';
+    moveRobot(robot, 1, [robot], board, 1);
+    expect(robot.position).toEqual({ x: 8, y: 8 });
+    // Direction should still be north (portals don't change direction)
+    expect(robot.direction).toBe('north');
   });
 });
 
@@ -1206,5 +1349,45 @@ describe('executeRegister', () => {
     // Gear rotates: south → west
     expect(robot.position).toEqual({ x: 6, y: 5 });
     expect(robot.direction).toBe('west');
+  });
+});
+
+// --- Elevation / Ledge ---
+
+describe('elevation / ledge', () => {
+  it('push off ledge deals 2 damage', () => {
+    const board = createTestBoard();
+    // Pusher and target both on elevation 1, target gets pushed to elevation 0
+    setTile(board, 5, 6, { type: 'floor', elevation: 1 });
+    setTile(board, 5, 5, { type: 'floor', elevation: 1 });
+    setTile(board, 5, 4, { type: 'floor', elevation: 0 });
+    const pusher = createTestRobot({ id: 'pusher', direction: 'north', position: { x: 5, y: 6 } });
+    const target = createTestRobot({ id: 'target', direction: 'east', position: { x: 5, y: 5 } });
+    // Pusher moves north into target, pushing target from elevation 1 to elevation 0
+    moveRobot(pusher, 1, [pusher, target], board, 1);
+    expect(target.position).toEqual({ x: 5, y: 4 });
+    expect(target.health).toBe(GAME.STARTING_HEALTH - 2);
+  });
+
+  it('conveyor off ledge deals 2 damage', () => {
+    const board = createTestBoard();
+    setTile(board, 5, 5, { type: 'conveyor', direction: 'east', elevation: 1 });
+    setTile(board, 6, 5, { type: 'floor', elevation: 0 });
+    const robot = createTestRobot({ position: { x: 5, y: 5 } });
+    processAllConveyors([robot], board, 1);
+    expect(robot.position).toEqual({ x: 6, y: 5 });
+    expect(robot.health).toBe(GAME.STARTING_HEALTH - 2);
+  });
+
+  it('ledge fall kills robot at 2 health', () => {
+    const board = createTestBoard();
+    setTile(board, 5, 5, { type: 'floor', elevation: 1 });
+    setTile(board, 5, 4, { type: 'floor', elevation: 0 });
+    const robot = createTestRobot({ direction: 'north', position: { x: 5, y: 5 }, health: 2 });
+    moveRobot(robot, 1, [robot], board, 1);
+    // Moves from elevation 1 to 0 (non-ramp), takes 2 damage, health → 0 → death
+    expect(robot.position).toEqual({ x: 5, y: 4 });
+    expect(robot.health).toBe(0);
+    expect(robot.lives).toBe(GAME.STARTING_LIVES - 1);
   });
 });

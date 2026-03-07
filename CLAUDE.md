@@ -158,6 +158,13 @@ pnpm --filter @mechmarathon/server add <package>
 - [x] Per-element review session 1: 21 new tests, 3 bug fixes (213 total tests)
   - Fixed: push-off-board (pusher now advances), conveyor off-board (now kills), current event type (`'current'` not `'conveyor'`) + off-board death
   - New coverage: pusher chain/off-board, drain/radioactive_drain, trap_pit (7 tests), randomizer
+- [x] Per-element review session 2: 16 new tests, 0 bug fixes (229 total tests)
+  - Repulsor: bounce event, edge bounce, move2 bounce (3 tests)
+  - Portal: event details, no matching portal, direction preservation (3 tests)
+  - Oil slick: slide into pit, wall-blocked slide, robot-blocked slide (3 tests)
+  - Water: move2 reduction, backup reduction (2 tests)
+  - Teleporter: move2 tripled, backup tripled (2 tests)
+  - Elevation/ledge: push off ledge damage, conveyor off ledge damage, lethal ledge fall (3 tests)
 - [x] Board editor undo/redo + keyboard shortcuts
 - [x] Graphics abstraction layer (tile renderer registry, 3 enhanced renderers: floor, pit, conveyor)
 
@@ -166,6 +173,6 @@ pnpm --filter @mechmarathon/server add <package>
 - [x] Session 3: Undo/redo system + keyboard shortcut framework for board editor
 - [x] Session 4: Graphics abstraction layer (tile renderer registry, enhanced renderers)
 - [x] Per-element review session 1: push, conveyor, current, drain, trap_pit, randomizer (done)
-- [ ] Per-element review session 2: ledge, teleporter, repulsor, portal, water, oil_slick
+- [x] Per-element review session 2: ledge, teleporter, repulsor, portal, water, oil_slick
 - [ ] Implement reputation updates on game completion
 - [ ] Create the 59 official RoboRally board definitions

@@ -25,6 +25,12 @@ import {
   ONEWAY_WALL_EXIT_COLOR,
   ELEVATION_COLOR,
 } from './constants.js';
+import { getRenderer, getRenderMode } from './tile-renderers/index.js';
+
+// Import renderers to trigger registration
+import './tile-renderers/floor.js';
+import './tile-renderers/pit.js';
+import './tile-renderers/conveyor.js';
 
 const SYMBOL_STYLE = new TextStyle({
   fontSize: 16,
@@ -98,6 +104,12 @@ export class TileLayer {
   }
 
   _drawTile(tile, px, py) {
+    const renderer = getRenderer(tile.type);
+    if (renderer) {
+      renderer(this.container, tile, px, py, TILE_SIZE);
+      return;
+    }
+    // Fallback: solid color rect
     const g = new Graphics();
     g.rect(px, py, TILE_SIZE, TILE_SIZE).fill(TILE_COLORS[tile.type] ?? TILE_COLORS.floor);
     this.container.addChild(g);
@@ -160,6 +172,10 @@ export class TileLayer {
   }
 
   _drawSymbol(tile, px, py) {
+    // In enhanced mode, skip text symbols for tile types whose enhanced
+    // renderer already draws directional/decorative visuals
+    if (getRenderMode() === 'enhanced' && getRenderer(tile.type)) return;
+
     let symbol;
 
     if (tile.type === 'conveyor' && tile.direction) {

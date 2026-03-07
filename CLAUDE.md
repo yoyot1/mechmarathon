@@ -156,12 +156,12 @@ pnpm --filter @mechmarathon/server add <package>
 - [x] Foundation tests: movement, deck, board, options (104 tests)
 - [x] Core execution tests: 88 tests (executeCard, moveRobot, push, conveyors, gears, pushers, crushers, flamers, lasers, checkpoints, repair, radiation, death/respawn, register execution, win condition, virtual status)
 - [x] Board editor undo/redo + keyboard shortcuts
-- [ ] Graphics abstraction layer (tile renderer registry)
+- [x] Graphics abstraction layer (tile renderer registry, 3 enhanced renderers: floor, pit, conveyor)
 
 ### Next Steps
 - [x] Session 2: Core execution tests (executeCard, moveRobot, push mechanics, death/respawn, register execution)
 - [x] Session 3: Undo/redo system + keyboard shortcut framework for board editor
-- [ ] Session 4: Graphics abstraction layer (tile renderer registry, enhanced renderers)
+- [x] Session 4: Graphics abstraction layer (tile renderer registry, enhanced renderers)
 - [ ] Review all execution tests for correctness against RoboRally rules (known issue: push-off-board should let pusher advance; other tests may also match implementation rather than correct behavior)
 - [ ] Per-element systematic review: TDD approach — define correct behavior tests first, then fix implementation to match
 - [ ] Implement reputation updates on game completion

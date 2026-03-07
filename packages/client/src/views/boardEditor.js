@@ -4,17 +4,9 @@ import { api } from '../lib/api.js';
 import { navigateTo } from '../lib/router.js';
 import * as history from '../lib/editor/history.js';
 import * as shortcuts from '../lib/editor/shortcuts.js';
+import * as editorCanvas from '../lib/editor/editorCanvas.js';
+import { setRenderMode, getRenderMode } from '../lib/board-renderer/index.js';
 
-const ARROW_MAP = { north: '\u2191', south: '\u2193', east: '\u2192', west: '\u2190' };
-const SYMBOL_MAP = {
-  floor: '', conveyor: '', express_conveyor: '', pit: '\u2716', trap_pit: '\u2716',
-  gear_cw: '\u21BB', gear_ccw: '\u21BA', repair: '\u2692', spawn: '\u2605',
-  oil_slick: '\u{1F4A7}', water: '\u2248', current: '',
-  portal: '\u{1F300}', drain: '\u2B07', radioactive_drain: '\u2622',
-  teleporter: '\u{1F4AB}', randomizer: '\u{1F3B2}', repulsor: '\u{1F6D1}',
-  radiation: '\u2622', radioactive_waste: '\u2623', chop_shop: '\u{1F527}',
-  ledge: '\u2581', ramp: '\u2F00',
-};
 const TYPE_LABELS = {
   floor: 'Floor', conveyor: 'Conveyor', express_conveyor: 'Express', gear_cw: 'Gear CW',
   gear_ccw: 'Gear CCW', pit: 'Pit', trap_pit: 'Trap Pit', repair: 'Repair', spawn: 'Spawn',
@@ -25,13 +17,12 @@ const TYPE_LABELS = {
   ledge: 'Ledge', ramp: 'Ramp',
 };
 
+const ARROW_MAP = { north: '\u2191', south: '\u2193', east: '\u2192', west: '\u2190' };
+
 const PORTAL_GROUPS = ['A', 'B', 'C', 'D'];
 
 const SIDE_FEATURE_LABELS = { laser: 'Laser', pusher: 'Pusher' };
-const SIDE_FEATURE_SYMBOLS = { laser: '\u26A1', pusher: '\u25B6' };
-
 const OVERLAY_LABELS = { flamer: 'Flamer', crusher: 'Crusher' };
-const OVERLAY_SYMBOLS = { flamer: '\u{1F525}', crusher: '\u2B07' };
 
 // Elements that need phase selection
 const PHASE_ELEMENTS = new Set(['pusher', 'flamer', 'crusher', 'trap_pit']);
@@ -42,22 +33,30 @@ let boardDescription = '';
 let boardId = null;
 let selectedTool = 'floor';
 let selectedDirection = 'north';
-let selectedSideFeature = null; // 'laser', 'pusher'
-let selectedOverlay = null; // 'flamer', 'crusher'
+let selectedSideFeature = null;
+let selectedOverlay = null;
 let selectedStrength = 1;
-let selectedEntry = []; // for conveyor curves/merges
-let selectedPhases = [1, 3, 5]; // default active phases for new phase-based elements
-let selectedGroup = 'A'; // for portal pairing
-let selectedElevation = 0; // elevation level 0/1/2
+let selectedEntry = [];
+let selectedPhases = [1, 3, 5];
+let selectedGroup = 'A';
+let selectedElevation = 0;
 let wallMode = false;
 let oneWayWallMode = false;
-let selectedBlocks = 'entry'; // 'entry' or 'exit'
+let selectedBlocks = 'entry';
 let saving = false;
 let error = '';
 let isDragging = false;
-let selectedCell = null; // {x, y} for tile info display
-let lastExpandedKey = null; // tracks which element's options are open for animation
+let lastDragCell = null;
+let selectedCell = null;
+let lastExpandedKey = null;
 let showShortcutsHelp = false;
+let canvasInitialized = false;
+
+// Persistent DOM wrapper references (survive update() calls)
+let headerWrapper = null;
+let toolbarWrapper = null;
+let canvasWrapper = null;
+let sidebarWrapper = null;
 
 function initTiles() {
   tiles = [];
@@ -86,11 +85,38 @@ function performRedo() {
   }
 }
 
+// Document-level mouseup handler (stored for cleanup)
+function onDocumentMouseUp() { isDragging = false; lastDragCell = null; }
+
 export function render(container, params) {
   boardId = params?.id || null;
   error = '';
   saving = false;
+  canvasInitialized = false;
   history.clear();
+
+  // Build persistent layout structure once
+  container.innerHTML = `
+    <div class="board-editor">
+      <div id="editor-header-wrapper"></div>
+      <div class="board-editor-body">
+        <div id="editor-toolbar-wrapper" class="editor-toolbar"></div>
+        <div id="editor-canvas-wrapper" class="editor-canvas-wrapper"></div>
+        <div id="editor-sidebar-wrapper" class="editor-sidebar"></div>
+      </div>
+    </div>
+  `;
+
+  headerWrapper = container.querySelector('#editor-header-wrapper');
+  toolbarWrapper = container.querySelector('#editor-toolbar-wrapper');
+  canvasWrapper = container.querySelector('#editor-canvas-wrapper');
+  sidebarWrapper = container.querySelector('#editor-sidebar-wrapper');
+
+  // Canvas event listeners (attached once, not on every update)
+  canvasWrapper.addEventListener('mousedown', onCanvasMouseDown);
+  canvasWrapper.addEventListener('mousemove', onCanvasMouseMove);
+  canvasWrapper.addEventListener('contextmenu', onCanvasContextMenu);
+  document.addEventListener('mouseup', onDocumentMouseUp);
 
   if (boardId) {
     api(`/api/boards/${boardId}`).then((board) => {
@@ -110,7 +136,6 @@ export function render(container, params) {
   }
 
   function renderElementOptions(key, category) {
-    // category: 'ground', 'sideFeature', 'overlay'
     const directionHtml = `
       <span class="option-label">Direction</span>
       <div class="direction-picker">
@@ -210,7 +235,7 @@ export function render(container, params) {
     // Capture old panel content before re-render for simultaneous collapse
     let collapseInfo = null;
     if (isCollapsing) {
-      const oldWrapper = container.querySelector('.options-wrapper');
+      const oldWrapper = toolbarWrapper.querySelector('.options-wrapper');
       if (oldWrapper) {
         collapseInfo = { key: lastExpandedKey, html: oldWrapper.innerHTML };
       }
@@ -220,134 +245,102 @@ export function render(container, params) {
     const wrapperAnim = isNewExpansion ? ' expanding' : '';
 
     // Save toolbar scroll position before re-render
-    const toolbar = container.querySelector('.editor-toolbar');
-    const prevScroll = toolbar ? toolbar.scrollTop : 0;
+    const prevScroll = toolbarWrapper.scrollTop;
 
-    container.innerHTML = `
-        <div class="board-editor">
-          <div class="board-editor-header">
-            <h2>${boardId ? 'Edit Board' : 'New Board'}</h2>
-            <div class="actions">
-              <a href="/boards" data-link class="btn btn-secondary">Back</a>
-              <button class="btn" id="save-btn" ${!canSave ? 'disabled' : ''}>${saving ? 'Saving...' : 'Save'}</button>
-            </div>
-          </div>
-
-          ${error ? `<p class="error">${error}</p>` : ''}
-
-          <div class="board-editor-body">
-            <div class="editor-toolbar">
-              <h4>Board Elements</h4>
-              ${BOARD.TILE_TYPES.map((t) => {
-                const isActive = selectedTool === t && isGroundMode;
-                const opts = isActive ? renderElementOptions(t, 'ground') : '';
-                return `<div class="element-item${opts ? ' has-options' : ''}">
-                  <button class="tool-btn ${isActive ? 'active' : ''}" data-tool="${t}">
-                    ${TYPE_LABELS[t] || t}
-                  </button>
-                  ${opts ? `<div class="options-wrapper${wrapperAnim}"><div class="element-options">${opts}</div></div>` : ''}
-                </div>`;
-              }).join('')}
-
-              <h4>Side Features</h4>
-              ${BOARD.SIDE_FEATURE_TYPES.map((t) => {
-                const isActive = selectedSideFeature === t;
-                const opts = isActive ? renderElementOptions(t, 'sideFeature') : '';
-                return `<div class="element-item${opts ? ' has-options' : ''}">
-                  <button class="tool-btn ${isActive ? 'active' : ''}" data-side-feature="${t}">
-                    ${SIDE_FEATURE_LABELS[t] || t}
-                  </button>
-                  ${opts ? `<div class="options-wrapper${wrapperAnim}"><div class="element-options">${opts}</div></div>` : ''}
-                </div>`;
-              }).join('')}
-
-              <h4>Overlays</h4>
-              ${BOARD.OVERLAY_TYPES.map((t) => {
-                const isActive = selectedOverlay === t;
-                const opts = isActive ? renderElementOptions(t, 'overlay') : '';
-                return `<div class="element-item${opts ? ' has-options' : ''}">
-                  <button class="tool-btn ${isActive ? 'active' : ''}" data-overlay="${t}">
-                    ${OVERLAY_LABELS[t] || t}
-                  </button>
-                  ${opts ? `<div class="options-wrapper${wrapperAnim}"><div class="element-options">${opts}</div></div>` : ''}
-                </div>`;
-              }).join('')}
-
-              <h4>Tools</h4>
-              <div class="undo-redo-row">
-                <button class="tool-btn undo-btn" id="undo-btn" ${!history.canUndo() ? 'disabled' : ''} title="Undo (Ctrl+Z)">Undo</button>
-                <button class="tool-btn redo-btn" id="redo-btn" ${!history.canRedo() ? 'disabled' : ''} title="Redo (Ctrl+Shift+Z)">Redo</button>
-              </div>
-              <button class="tool-btn ${wallMode ? 'active' : ''}" id="wall-mode-btn">Wall Mode <kbd>W</kbd></button>
-              <div class="element-item${oneWayWallMode ? ' has-options' : ''}">
-                <button class="tool-btn ${oneWayWallMode ? 'active' : ''}" id="oneway-wall-mode-btn">One-Way Wall</button>
-                ${oneWayWallMode ? `
-                  <div class="options-wrapper${wrapperAnim}">
-                    <div class="element-options">
-                      <span class="option-label">Blocks</span>
-                      <div class="blocks-picker">
-                        <button class="blocks-btn ${selectedBlocks === 'entry' ? 'active' : ''}" data-blocks="entry">Entry</button>
-                        <button class="blocks-btn ${selectedBlocks === 'exit' ? 'active' : ''}" data-blocks="exit">Exit</button>
-                      </div>
-                    </div>
-                  </div>
-                ` : ''}
-              </div>
-              <button class="tool-btn" id="eraser-btn">Eraser <kbd>E</kbd></button>
-              <button class="tool-btn" id="clear-btn">Clear All</button>
-              <button class="tool-btn" id="shortcuts-help-btn">${showShortcutsHelp ? 'Hide' : 'Show'} Shortcuts <kbd>?</kbd></button>
-              ${showShortcutsHelp ? renderShortcutsHelp() : ''}
-
-              ${isGroundMode ? `
-                <h4>Elevation</h4>
-                <div class="elevation-picker">
-                  ${[0, 1, 2].map((e) => `
-                    <button class="elevation-btn ${selectedElevation === e ? 'active' : ''}" data-elevation="${e}">${e}</button>
-                  `).join('')}
-                </div>
-              ` : ''}
-            </div>
-
-            <div class="editor-grid-wrapper">
-              <div class="editor-grid" id="editor-grid">
-                ${tiles.map((row, y) => row.map((tile, x) => renderCell(tile, x, y)).join('')).join('')}
-              </div>
-            </div>
-
-            <div class="editor-sidebar">
-              <label>
-                Name
-                <input type="text" id="board-name" value="${escapeAttr(boardName)}"
-                  maxlength="${BOARD.NAME_MAX_LENGTH}" placeholder="Board name" />
-              </label>
-              <label>
-                Description
-                <textarea id="board-desc" maxlength="${BOARD.DESCRIPTION_MAX_LENGTH}"
-                  placeholder="Optional description">${escapeHtml(boardDescription)}</textarea>
-              </label>
-              <div class="checklist">
-                <div class="${boardName.length >= BOARD.NAME_MIN_LENGTH ? 'ok' : 'fail'}">
-                  ${boardName.length >= BOARD.NAME_MIN_LENGTH ? '\u2713' : '\u2717'} Name (${BOARD.NAME_MIN_LENGTH}+ chars)
-                </div>
-                <div class="${hasContent ? 'ok' : 'fail'}">
-                  ${hasContent ? '\u2713' : '\u2717'} Has non-floor tiles
-                </div>
-              </div>
-
-              ${selectedCell ? renderTileInfo(selectedCell.x, selectedCell.y) : ''}
-            </div>
-          </div>
+    // -- Header --
+    headerWrapper.innerHTML = `
+      <div class="board-editor-header">
+        <h2>${boardId ? 'Edit Board' : 'New Board'}</h2>
+        <div class="actions">
+          <a href="/boards" data-link class="btn btn-secondary">Back</a>
+          <button class="btn" id="save-btn" ${!canSave ? 'disabled' : ''}>${saving ? 'Saving...' : 'Save'}</button>
         </div>
-      `;
+      </div>
+      ${error ? `<p class="error">${error}</p>` : ''}
+    `;
 
-    // Inject collapsing wrapper at the old element's position (simultaneous with expand)
+    // -- Toolbar --
+    toolbarWrapper.innerHTML = `
+      <h4>Board Elements</h4>
+      ${BOARD.TILE_TYPES.map((t) => {
+        const isActive = selectedTool === t && isGroundMode;
+        const opts = isActive ? renderElementOptions(t, 'ground') : '';
+        return `<div class="element-item${opts ? ' has-options' : ''}">
+          <button class="tool-btn ${isActive ? 'active' : ''}" data-tool="${t}">
+            ${TYPE_LABELS[t] || t}
+          </button>
+          ${opts ? `<div class="options-wrapper${wrapperAnim}"><div class="element-options">${opts}</div></div>` : ''}
+        </div>`;
+      }).join('')}
+
+      <h4>Side Features</h4>
+      ${BOARD.SIDE_FEATURE_TYPES.map((t) => {
+        const isActive = selectedSideFeature === t;
+        const opts = isActive ? renderElementOptions(t, 'sideFeature') : '';
+        return `<div class="element-item${opts ? ' has-options' : ''}">
+          <button class="tool-btn ${isActive ? 'active' : ''}" data-side-feature="${t}">
+            ${SIDE_FEATURE_LABELS[t] || t}
+          </button>
+          ${opts ? `<div class="options-wrapper${wrapperAnim}"><div class="element-options">${opts}</div></div>` : ''}
+        </div>`;
+      }).join('')}
+
+      <h4>Overlays</h4>
+      ${BOARD.OVERLAY_TYPES.map((t) => {
+        const isActive = selectedOverlay === t;
+        const opts = isActive ? renderElementOptions(t, 'overlay') : '';
+        return `<div class="element-item${opts ? ' has-options' : ''}">
+          <button class="tool-btn ${isActive ? 'active' : ''}" data-overlay="${t}">
+            ${OVERLAY_LABELS[t] || t}
+          </button>
+          ${opts ? `<div class="options-wrapper${wrapperAnim}"><div class="element-options">${opts}</div></div>` : ''}
+        </div>`;
+      }).join('')}
+
+      <h4>Tools</h4>
+      <div class="undo-redo-row">
+        <button class="tool-btn undo-btn" id="undo-btn" ${!history.canUndo() ? 'disabled' : ''} title="Undo (Ctrl+Z)">Undo</button>
+        <button class="tool-btn redo-btn" id="redo-btn" ${!history.canRedo() ? 'disabled' : ''} title="Redo (Ctrl+Shift+Z)">Redo</button>
+      </div>
+      <button class="tool-btn ${wallMode ? 'active' : ''}" id="wall-mode-btn">Wall Mode <kbd>W</kbd></button>
+      <div class="element-item${oneWayWallMode ? ' has-options' : ''}">
+        <button class="tool-btn ${oneWayWallMode ? 'active' : ''}" id="oneway-wall-mode-btn">One-Way Wall</button>
+        ${oneWayWallMode ? `
+          <div class="options-wrapper${wrapperAnim}">
+            <div class="element-options">
+              <span class="option-label">Blocks</span>
+              <div class="blocks-picker">
+                <button class="blocks-btn ${selectedBlocks === 'entry' ? 'active' : ''}" data-blocks="entry">Entry</button>
+                <button class="blocks-btn ${selectedBlocks === 'exit' ? 'active' : ''}" data-blocks="exit">Exit</button>
+              </div>
+            </div>
+          </div>
+        ` : ''}
+      </div>
+      <button class="tool-btn" id="eraser-btn">Eraser <kbd>E</kbd></button>
+      <button class="tool-btn" id="clear-btn">Clear All</button>
+      <button class="tool-btn" id="gfx-toggle-btn">GFX: ${getRenderMode() === 'enhanced' ? 'Enhanced' : 'Simple'}</button>
+      <button class="tool-btn" id="shortcuts-help-btn">${showShortcutsHelp ? 'Hide' : 'Show'} Shortcuts <kbd>?</kbd></button>
+      ${showShortcutsHelp ? renderShortcutsHelp() : ''}
+
+      ${isGroundMode ? `
+        <h4>Elevation</h4>
+        <div class="elevation-picker">
+          ${[0, 1, 2].map((e) => `
+            <button class="elevation-btn ${selectedElevation === e ? 'active' : ''}" data-elevation="${e}">${e}</button>
+          `).join('')}
+        </div>
+      ` : ''}
+    `;
+
+    // Inject collapsing wrapper at the old element's position
     if (collapseInfo) {
       const [cat, key] = collapseInfo.key.split(':');
       let targetBtn = null;
-      if (cat === 'ground') targetBtn = container.querySelector(`[data-tool="${key}"]`);
-      else if (cat === 'sf') targetBtn = container.querySelector(`[data-side-feature="${key}"]`);
-      else if (cat === 'ov') targetBtn = container.querySelector(`[data-overlay="${key}"]`);
-      else if (cat === 'tool') targetBtn = container.querySelector('#oneway-wall-mode-btn');
+      if (cat === 'ground') targetBtn = toolbarWrapper.querySelector(`[data-tool="${key}"]`);
+      else if (cat === 'sf') targetBtn = toolbarWrapper.querySelector(`[data-side-feature="${key}"]`);
+      else if (cat === 'ov') targetBtn = toolbarWrapper.querySelector(`[data-overlay="${key}"]`);
+      else if (cat === 'tool') targetBtn = toolbarWrapper.querySelector('#oneway-wall-mode-btn');
 
       const elementItem = targetBtn?.closest('.element-item');
       if (elementItem) {
@@ -359,46 +352,53 @@ export function render(container, params) {
       }
     }
 
-    // Restore toolbar scroll position and scroll expanded options into view
-    const newToolbar = container.querySelector('.editor-toolbar');
-    if (newToolbar) {
-      newToolbar.scrollTop = prevScroll;
-      const expandedOpts = newToolbar.querySelector('.options-wrapper:not(.collapsing)');
-      if (expandedOpts) {
-        expandedOpts.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    // Restore toolbar scroll position
+    toolbarWrapper.scrollTop = prevScroll;
+    const expandedOpts = toolbarWrapper.querySelector('.options-wrapper:not(.collapsing)');
+    if (expandedOpts) {
+      expandedOpts.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    }
+
+    // -- Sidebar --
+    sidebarWrapper.innerHTML = `
+      <label>
+        Name
+        <input type="text" id="board-name" value="${escapeAttr(boardName)}"
+          maxlength="${BOARD.NAME_MAX_LENGTH}" placeholder="Board name" />
+      </label>
+      <label>
+        Description
+        <textarea id="board-desc" maxlength="${BOARD.DESCRIPTION_MAX_LENGTH}"
+          placeholder="Optional description">${escapeHtml(boardDescription)}</textarea>
+      </label>
+      <div class="checklist">
+        <div class="${boardName.length >= BOARD.NAME_MIN_LENGTH ? 'ok' : 'fail'}">
+          ${boardName.length >= BOARD.NAME_MIN_LENGTH ? '\u2713' : '\u2717'} Name (${BOARD.NAME_MIN_LENGTH}+ chars)
+        </div>
+        <div class="${hasContent ? 'ok' : 'fail'}">
+          ${hasContent ? '\u2713' : '\u2717'} Has non-floor tiles
+        </div>
+      </div>
+      ${selectedCell ? renderTileInfo(selectedCell.x, selectedCell.y) : ''}
+    `;
+
+    // -- Canvas (PixiJS) --
+    if (!canvasInitialized) {
+      canvasInitialized = true;
+      editorCanvas.initEditorCanvas(canvasWrapper).then(() => {
+        editorCanvas.rebuildBoard(tiles);
+        if (selectedCell) editorCanvas.setSelectedCell(selectedCell.x, selectedCell.y);
+      });
+    } else {
+      editorCanvas.rebuildBoard(tiles);
+      if (selectedCell) {
+        editorCanvas.setSelectedCell(selectedCell.x, selectedCell.y);
+      } else {
+        editorCanvas.setSelectedCell(null, null);
       }
     }
 
-    attachListeners();
-  }
-
-  function renderCell(tile, x, y) {
-    const wallHtml = (tile.walls || []).map((w) => `<div class="wall wall-${w}"></div>`).join('');
-    const owWallHtml = (tile.oneWayWalls || []).map((ow) =>
-      `<div class="oneway-wall oneway-wall-${ow.side}" data-blocks="${ow.blocks}" title="one-way ${ow.side} blocks ${ow.blocks}"></div>`
-    ).join('');
-    const sfHtml = (tile.sideFeatures || []).map((f) => {
-      const symbol = SIDE_FEATURE_SYMBOLS[f.type] || '?';
-      const title = f.type + (f.phases ? ` [${f.phases.join(',')}]` : '') + (f.strength > 1 ? ` str:${f.strength}` : '');
-      return `<div class="side-feature side-feature-${f.side}" data-sf-type="${f.type}" title="${title}">${symbol}</div>`;
-    }).join('');
-    const overlayHtml = (tile.overlays || []).map((o) => {
-      const symbol = OVERLAY_SYMBOLS[o.type] || '?';
-      const title = o.type + (o.phases ? ` [${o.phases.join(',')}]` : '');
-      return `<div class="overlay-indicator" data-overlay-type="${o.type}" title="${title}">${symbol}</div>`;
-    }).join('');
-    const entryHtml = (tile.entry || []).map((d) =>
-      `<div class="entry-indicator entry-${d}"></div>`
-    ).join('');
-    const arrow = tile.direction ? `<span class="arrow">${ARROW_MAP[tile.direction]}</span>` : '';
-    const symbol = SYMBOL_MAP[tile.type] || '';
-    const phaseHtml = tile.phases?.length ? `<span class="phase-dots">${tile.phases.join('')}</span>` : '';
-    const groupHtml = tile.group ? `<span class="group-label">${tile.group}</span>` : '';
-    const elevHtml = tile.elevation > 0 ? `<span class="elevation-badge">E${tile.elevation}</span>` : '';
-    const isSelected = selectedCell && selectedCell.x === x && selectedCell.y === y;
-    return `<div class="editor-cell ${isSelected ? 'selected' : ''}" data-type="${tile.type}" data-x="${x}" data-y="${y}">
-      ${wallHtml}${owWallHtml}${sfHtml}${overlayHtml}${entryHtml}${arrow || symbol}${phaseHtml}${groupHtml}${elevHtml}
-    </div>`;
+    attachToolbarSidebarListeners();
   }
 
   function renderTileInfo(x, y) {
@@ -441,9 +441,9 @@ export function render(container, params) {
     return `<div class="tile-info">${parts.join('')}</div>`;
   }
 
-  function attachListeners() {
+  function attachToolbarSidebarListeners() {
     // Tool buttons (ground tiles)
-    container.querySelectorAll('.tool-btn[data-tool]').forEach((btn) => {
+    toolbarWrapper.querySelectorAll('.tool-btn[data-tool]').forEach((btn) => {
       btn.addEventListener('click', () => {
         selectedTool = btn.dataset.tool;
         selectedSideFeature = null;
@@ -456,7 +456,7 @@ export function render(container, params) {
     });
 
     // Side feature buttons
-    container.querySelectorAll('.tool-btn[data-side-feature]').forEach((btn) => {
+    toolbarWrapper.querySelectorAll('.tool-btn[data-side-feature]').forEach((btn) => {
       btn.addEventListener('click', () => {
         selectedSideFeature = btn.dataset.sideFeature;
         selectedOverlay = null;
@@ -467,7 +467,7 @@ export function render(container, params) {
     });
 
     // Overlay buttons
-    container.querySelectorAll('.tool-btn[data-overlay]').forEach((btn) => {
+    toolbarWrapper.querySelectorAll('.tool-btn[data-overlay]').forEach((btn) => {
       btn.addEventListener('click', () => {
         selectedOverlay = btn.dataset.overlay;
         selectedSideFeature = null;
@@ -478,7 +478,7 @@ export function render(container, params) {
     });
 
     // Wall mode
-    container.querySelector('#wall-mode-btn')?.addEventListener('click', () => {
+    toolbarWrapper.querySelector('#wall-mode-btn')?.addEventListener('click', () => {
       wallMode = !wallMode;
       oneWayWallMode = false;
       selectedSideFeature = null;
@@ -487,7 +487,7 @@ export function render(container, params) {
     });
 
     // One-way wall mode
-    container.querySelector('#oneway-wall-mode-btn')?.addEventListener('click', () => {
+    toolbarWrapper.querySelector('#oneway-wall-mode-btn')?.addEventListener('click', () => {
       oneWayWallMode = !oneWayWallMode;
       wallMode = false;
       selectedSideFeature = null;
@@ -496,7 +496,7 @@ export function render(container, params) {
     });
 
     // Blocks picker
-    container.querySelectorAll('.blocks-btn').forEach((btn) => {
+    toolbarWrapper.querySelectorAll('.blocks-btn').forEach((btn) => {
       btn.addEventListener('click', () => {
         selectedBlocks = btn.dataset.blocks;
         update();
@@ -504,17 +504,24 @@ export function render(container, params) {
     });
 
     // Undo/Redo
-    container.querySelector('#undo-btn')?.addEventListener('click', performUndo);
-    container.querySelector('#redo-btn')?.addEventListener('click', performRedo);
+    toolbarWrapper.querySelector('#undo-btn')?.addEventListener('click', performUndo);
+    toolbarWrapper.querySelector('#redo-btn')?.addEventListener('click', performRedo);
+
+    // GFX toggle
+    toolbarWrapper.querySelector('#gfx-toggle-btn')?.addEventListener('click', () => {
+      const newMode = getRenderMode() === 'enhanced' ? 'simple' : 'enhanced';
+      setRenderMode(newMode);
+      update();
+    });
 
     // Shortcuts help toggle
-    container.querySelector('#shortcuts-help-btn')?.addEventListener('click', () => {
+    toolbarWrapper.querySelector('#shortcuts-help-btn')?.addEventListener('click', () => {
       showShortcutsHelp = !showShortcutsHelp;
       update();
     });
 
     // Eraser
-    container.querySelector('#eraser-btn')?.addEventListener('click', () => {
+    toolbarWrapper.querySelector('#eraser-btn')?.addEventListener('click', () => {
       selectedTool = 'floor';
       selectedSideFeature = null;
       selectedOverlay = null;
@@ -525,7 +532,7 @@ export function render(container, params) {
     });
 
     // Clear all
-    container.querySelector('#clear-btn')?.addEventListener('click', () => {
+    toolbarWrapper.querySelector('#clear-btn')?.addEventListener('click', () => {
       history.push(tiles);
       initTiles();
       selectedCell = null;
@@ -533,15 +540,15 @@ export function render(container, params) {
     });
 
     // Direction picker
-    container.querySelectorAll('.direction-picker button').forEach((btn) => {
+    toolbarWrapper.querySelectorAll('.direction-picker button').forEach((btn) => {
       btn.addEventListener('click', () => {
         selectedDirection = btn.dataset.dir;
         update();
       });
     });
 
-    // Entry picker (multi-select toggles)
-    container.querySelectorAll('.entry-btn').forEach((btn) => {
+    // Entry picker
+    toolbarWrapper.querySelectorAll('.entry-btn').forEach((btn) => {
       btn.addEventListener('click', () => {
         const dir = btn.dataset.entry;
         const idx = selectedEntry.indexOf(dir);
@@ -555,15 +562,15 @@ export function render(container, params) {
     });
 
     // Strength picker
-    container.querySelectorAll('.strength-picker button').forEach((btn) => {
+    toolbarWrapper.querySelectorAll('.strength-picker button').forEach((btn) => {
       btn.addEventListener('click', () => {
         selectedStrength = parseInt(btn.dataset.strength);
         update();
       });
     });
 
-    // Phase picker (multi-select toggles)
-    container.querySelectorAll('.phase-btn').forEach((btn) => {
+    // Phase picker
+    toolbarWrapper.querySelectorAll('.phase-btn').forEach((btn) => {
       btn.addEventListener('click', () => {
         const phase = parseInt(btn.dataset.phase);
         const idx = selectedPhases.indexOf(phase);
@@ -577,8 +584,8 @@ export function render(container, params) {
       });
     });
 
-    // Group picker (single-select for portal pairing)
-    container.querySelectorAll('.group-btn').forEach((btn) => {
+    // Group picker
+    toolbarWrapper.querySelectorAll('.group-btn').forEach((btn) => {
       btn.addEventListener('click', () => {
         selectedGroup = btn.dataset.group;
         update();
@@ -586,15 +593,15 @@ export function render(container, params) {
     });
 
     // Elevation picker
-    container.querySelectorAll('.elevation-btn').forEach((btn) => {
+    toolbarWrapper.querySelectorAll('.elevation-btn').forEach((btn) => {
       btn.addEventListener('click', () => {
         selectedElevation = parseInt(btn.dataset.elevation);
         update();
       });
     });
 
-    // Remove one-way wall buttons in tile info
-    container.querySelectorAll('.btn-remove-ow').forEach((btn) => {
+    // Remove one-way wall buttons in tile info (sidebar)
+    sidebarWrapper.querySelectorAll('.btn-remove-ow').forEach((btn) => {
       btn.addEventListener('click', () => {
         history.push(tiles);
         const x = parseInt(btn.dataset.owX);
@@ -609,8 +616,8 @@ export function render(container, params) {
       });
     });
 
-    // Remove side feature buttons in tile info
-    container.querySelectorAll('.btn-remove-sf').forEach((btn) => {
+    // Remove side feature buttons in tile info (sidebar)
+    sidebarWrapper.querySelectorAll('.btn-remove-sf').forEach((btn) => {
       btn.addEventListener('click', () => {
         history.push(tiles);
         const x = parseInt(btn.dataset.sfX);
@@ -626,8 +633,8 @@ export function render(container, params) {
       });
     });
 
-    // Remove overlay buttons in tile info
-    container.querySelectorAll('.btn-remove-overlay').forEach((btn) => {
+    // Remove overlay buttons in tile info (sidebar)
+    sidebarWrapper.querySelectorAll('.btn-remove-overlay').forEach((btn) => {
       btn.addEventListener('click', () => {
         history.push(tiles);
         const x = parseInt(btn.dataset.ovX);
@@ -642,69 +649,65 @@ export function render(container, params) {
       });
     });
 
-    // Name/description inputs
-    container.querySelector('#board-name')?.addEventListener('input', (e) => {
+    // Name/description inputs (sidebar)
+    sidebarWrapper.querySelector('#board-name')?.addEventListener('input', (e) => {
       boardName = e.target.value;
-      const saveBtn = container.querySelector('#save-btn');
+      const saveBtn = headerWrapper.querySelector('#save-btn');
       if (saveBtn) saveBtn.disabled = boardName.length < BOARD.NAME_MIN_LENGTH || saving;
     });
 
-    container.querySelector('#board-desc')?.addEventListener('input', (e) => {
+    sidebarWrapper.querySelector('#board-desc')?.addEventListener('input', (e) => {
       boardDescription = e.target.value;
     });
 
-    // Grid interactions
-    const grid = container.querySelector('#editor-grid');
-    if (!grid) return;
-
-    grid.addEventListener('mousedown', (e) => {
-      const cell = e.target.closest('.editor-cell');
-      if (!cell) return;
-      isDragging = true;
-      history.push(tiles);
-      handleCellInteraction(cell, e);
-    });
-
-    grid.addEventListener('mousemove', (e) => {
-      if (!isDragging) return;
-      const cell = e.target.closest('.editor-cell');
-      if (!cell) return;
-      handleCellInteraction(cell, e);
-    });
-
-    document.addEventListener('mouseup', () => { isDragging = false; });
-
-    // Right-click to select tile for info display
-    grid.addEventListener('contextmenu', (e) => {
-      e.preventDefault();
-      const cell = e.target.closest('.editor-cell');
-      if (!cell) return;
-      const x = parseInt(cell.dataset.x);
-      const y = parseInt(cell.dataset.y);
-      selectedCell = { x, y };
-      update();
-    });
-
-    // Save
-    container.querySelector('#save-btn')?.addEventListener('click', handleSave);
+    // Save (header)
+    headerWrapper.querySelector('#save-btn')?.addEventListener('click', handleSave);
   }
 
-  function handleCellInteraction(cell, e) {
-    const x = parseInt(cell.dataset.x);
-    const y = parseInt(cell.dataset.y);
+  // --- Canvas interaction handlers ---
+
+  function onCanvasMouseDown(e) {
+    if (e.button !== 0) return; // left click only
+    const pos = editorCanvas.getGridPosition(e);
+    if (!pos) return;
+    isDragging = true;
+    lastDragCell = `${pos.gridX},${pos.gridY}`;
+    history.push(tiles);
+    handleCellInteractionFromPos(pos);
+  }
+
+  function onCanvasMouseMove(e) {
+    const pos = editorCanvas.getGridPosition(e);
+    if (pos) {
+      editorCanvas.setHoverCell(pos.gridX, pos.gridY);
+    } else {
+      editorCanvas.setHoverCell(null, null);
+    }
+    if (!isDragging || !pos) return;
+    const cellKey = `${pos.gridX},${pos.gridY}`;
+    if (cellKey === lastDragCell) return;
+    lastDragCell = cellKey;
+    handleCellInteractionFromPos(pos);
+  }
+
+  function onCanvasContextMenu(e) {
+    e.preventDefault();
+    const pos = editorCanvas.getGridPosition(e);
+    if (!pos) return;
+    selectedCell = { x: pos.gridX, y: pos.gridY };
+    update();
+  }
+
+  function handleCellInteractionFromPos(pos) {
+    const { gridX: x, gridY: y, offsetX, offsetY, cellW, cellH } = pos;
 
     if (wallMode) {
-      // Detect which edge was clicked based on offset
-      const rect = cell.getBoundingClientRect();
-      const ox = e.clientX - rect.left;
-      const oy = e.clientY - rect.top;
-      const threshold = 10;
-
+      const threshold = cellW * 0.2;
       let wallDir = null;
-      if (oy < threshold) wallDir = 'north';
-      else if (oy > rect.height - threshold) wallDir = 'south';
-      else if (ox < threshold) wallDir = 'west';
-      else if (ox > rect.width - threshold) wallDir = 'east';
+      if (offsetY < threshold) wallDir = 'north';
+      else if (offsetY > cellH - threshold) wallDir = 'south';
+      else if (offsetX < threshold) wallDir = 'west';
+      else if (offsetX > cellW - threshold) wallDir = 'east';
 
       if (wallDir) {
         const tile = tiles[y][x];
@@ -716,23 +719,18 @@ export function render(container, params) {
           walls.push(wallDir);
         }
         tiles[y][x] = { ...tile, walls: walls.length > 0 ? walls : undefined };
-        updateCell(cell, x, y);
+        editorCanvas.rebuildBoard(tiles);
       }
       return;
     }
 
     if (oneWayWallMode) {
-      // Detect which edge was clicked
-      const rect = cell.getBoundingClientRect();
-      const ox = e.clientX - rect.left;
-      const oy = e.clientY - rect.top;
-      const threshold = 10;
-
+      const threshold = cellW * 0.2;
       let wallDir = null;
-      if (oy < threshold) wallDir = 'north';
-      else if (oy > rect.height - threshold) wallDir = 'south';
-      else if (ox < threshold) wallDir = 'west';
-      else if (ox > rect.width - threshold) wallDir = 'east';
+      if (offsetY < threshold) wallDir = 'north';
+      else if (offsetY > cellH - threshold) wallDir = 'south';
+      else if (offsetX < threshold) wallDir = 'west';
+      else if (offsetX > cellW - threshold) wallDir = 'east';
 
       if (wallDir) {
         const tile = tiles[y][x];
@@ -741,33 +739,23 @@ export function render(container, params) {
         if (existingIdx >= 0) {
           owWalls.splice(existingIdx, 1);
         } else {
-          // Remove any existing one-way wall on this side (replace blocks type)
           const sameIdx = owWalls.findIndex((ow) => ow.side === wallDir);
           if (sameIdx >= 0) owWalls.splice(sameIdx, 1);
           owWalls.push({ side: wallDir, blocks: selectedBlocks });
         }
         tiles[y][x] = { ...tile, oneWayWalls: owWalls.length > 0 ? owWalls : undefined };
         selectedCell = { x, y };
-        updateCell(cell, x, y);
         update();
       }
       return;
     }
 
     if (selectedSideFeature) {
-      // Side feature placement: detect which edge of the tile was clicked
-      const rect = cell.getBoundingClientRect();
-      const ox = e.clientX - rect.left;
-      const oy = e.clientY - rect.top;
-      const w = rect.width;
-      const h = rect.height;
-
-      // Determine closest edge
       const distances = {
-        north: oy,
-        south: h - oy,
-        west: ox,
-        east: w - ox,
+        north: offsetY,
+        south: cellH - offsetY,
+        west: offsetX,
+        east: cellW - offsetX,
       };
       let side = 'north';
       let minDist = distances.north;
@@ -777,8 +765,6 @@ export function render(container, params) {
 
       const tile = tiles[y][x];
       const features = tile.sideFeatures || [];
-
-      // Toggle: if same type+side already exists, remove it
       const existingIdx = features.findIndex((f) => f.type === selectedSideFeature && f.side === side);
       if (existingIdx >= 0) {
         features.splice(existingIdx, 1);
@@ -795,17 +781,13 @@ export function render(container, params) {
 
       tiles[y][x] = { ...tile, sideFeatures: features.length > 0 ? features : undefined };
       selectedCell = { x, y };
-      updateCell(cell, x, y);
       update();
       return;
     }
 
     if (selectedOverlay) {
-      // Overlay placement: click tile to toggle overlay
       const tile = tiles[y][x];
       const overlays = tile.overlays || [];
-
-      // Toggle: if same type already exists, remove it
       const existingIdx = overlays.findIndex((o) => o.type === selectedOverlay);
       if (existingIdx >= 0) {
         overlays.splice(existingIdx, 1);
@@ -819,7 +801,6 @@ export function render(container, params) {
 
       tiles[y][x] = { ...tile, overlays: overlays.length > 0 ? overlays : undefined };
       selectedCell = { x, y };
-      updateCell(cell, x, y);
       update();
       return;
     }
@@ -843,52 +824,12 @@ export function render(container, params) {
     }
     // Preserve existing walls, side features, and overlays
     const existing = tiles[y][x];
-    if (existing.walls?.length > 0) {
-      newTile.walls = existing.walls;
-    }
-    if (existing.sideFeatures?.length > 0) {
-      newTile.sideFeatures = existing.sideFeatures;
-    }
-    if (existing.overlays?.length > 0) {
-      newTile.overlays = existing.overlays;
-    }
-    if (existing.oneWayWalls?.length > 0) {
-      newTile.oneWayWalls = existing.oneWayWalls;
-    }
+    if (existing.walls?.length > 0) newTile.walls = existing.walls;
+    if (existing.sideFeatures?.length > 0) newTile.sideFeatures = existing.sideFeatures;
+    if (existing.overlays?.length > 0) newTile.overlays = existing.overlays;
+    if (existing.oneWayWalls?.length > 0) newTile.oneWayWalls = existing.oneWayWalls;
     tiles[y][x] = newTile;
-    updateCell(cell, x, y);
-  }
-
-  function updateCell(cell, x, y) {
-    const tile = tiles[y][x];
-    cell.setAttribute('data-type', tile.type);
-    cell.innerHTML = renderCellInner(tile, x, y);
-  }
-
-  function renderCellInner(tile, x, y) {
-    const wallHtml = (tile.walls || []).map((w) => `<div class="wall wall-${w}"></div>`).join('');
-    const owWallHtml = (tile.oneWayWalls || []).map((ow) =>
-      `<div class="oneway-wall oneway-wall-${ow.side}" data-blocks="${ow.blocks}" title="one-way ${ow.side} blocks ${ow.blocks}"></div>`
-    ).join('');
-    const sfHtml = (tile.sideFeatures || []).map((f) => {
-      const symbol = SIDE_FEATURE_SYMBOLS[f.type] || '?';
-      const title = f.type + (f.phases ? ` [${f.phases.join(',')}]` : '') + (f.strength > 1 ? ` str:${f.strength}` : '');
-      return `<div class="side-feature side-feature-${f.side}" data-sf-type="${f.type}" title="${title}">${symbol}</div>`;
-    }).join('');
-    const overlayHtml = (tile.overlays || []).map((o) => {
-      const symbol = OVERLAY_SYMBOLS[o.type] || '?';
-      const title = o.type + (o.phases ? ` [${o.phases.join(',')}]` : '');
-      return `<div class="overlay-indicator" data-overlay-type="${o.type}" title="${title}">${symbol}</div>`;
-    }).join('');
-    const entryHtml = (tile.entry || []).map((d) =>
-      `<div class="entry-indicator entry-${d}"></div>`
-    ).join('');
-    const arrow = tile.direction ? `<span class="arrow">${ARROW_MAP[tile.direction]}</span>` : '';
-    const symbol = SYMBOL_MAP[tile.type] || '';
-    const phaseHtml = tile.phases?.length ? `<span class="phase-dots">${tile.phases.join('')}</span>` : '';
-    const groupHtml = tile.group ? `<span class="group-label">${tile.group}</span>` : '';
-    const elevHtml = tile.elevation > 0 ? `<span class="elevation-badge">E${tile.elevation}</span>` : '';
-    return `${wallHtml}${owWallHtml}${sfHtml}${overlayHtml}${entryHtml}${arrow || symbol}${phaseHtml}${groupHtml}${elevHtml}`;
+    editorCanvas.rebuildBoard(tiles);
   }
 
   async function handleSave() {
@@ -898,7 +839,6 @@ export function render(container, params) {
     update();
 
     try {
-      // Clean tiles: strip undefined properties
       const cleanTiles = tiles.map((row) =>
         row.map((t) => {
           const clean = { type: t.type };
@@ -972,7 +912,7 @@ export function render(container, params) {
   shortcuts.register('ArrowRight', () => { selectedDirection = 'east'; update(); }, 'Direction: East', 'Direction');
   shortcuts.register('ArrowLeft', () => { selectedDirection = 'west'; update(); }, 'Direction: West', 'Direction');
 
-  // Number keys for quick tile selection (1-9 maps to TILE_TYPES by toolbar order)
+  // Number keys for quick tile selection
   const tileKeys = BOARD.TILE_TYPES.slice(0, 9);
   tileKeys.forEach((t, i) => {
     shortcuts.register(String(i + 1), () => {
@@ -986,7 +926,6 @@ export function render(container, params) {
     }, TYPE_LABELS[t] || t, 'Tile Types');
   });
 
-  // Toggle shortcuts help panel
   shortcuts.register('shift+?', () => {
     showShortcutsHelp = !showShortcutsHelp;
     update();
@@ -996,11 +935,14 @@ export function render(container, params) {
 }
 
 export function unmount() {
+  editorCanvas.destroyEditorCanvas();
+  document.removeEventListener('mouseup', onDocumentMouseUp);
   boardId = null;
   boardName = '';
   boardDescription = '';
   tiles = [];
   isDragging = false;
+  lastDragCell = null;
   selectedCell = null;
   selectedSideFeature = null;
   selectedOverlay = null;
@@ -1008,6 +950,11 @@ export function unmount() {
   selectedElevation = 0;
   lastExpandedKey = null;
   showShortcutsHelp = false;
+  canvasInitialized = false;
+  headerWrapper = null;
+  toolbarWrapper = null;
+  canvasWrapper = null;
+  sidebarWrapper = null;
   history.clear();
   shortcuts.unregisterAll();
 }

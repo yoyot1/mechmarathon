@@ -267,17 +267,18 @@ describe('push mechanics', () => {
     expect(target.position).toEqual({ x: 5, y: 5 });
   });
 
-  it('push robot off board kills it but blocks pusher', () => {
+  it('push robot off board kills it and pusher advances', () => {
     const board = createTestBoard();
     const pusher = createTestRobot({ id: 'r1', direction: 'north', position: { x: 5, y: 1 } });
     const target = createTestRobot({ id: 'r2', position: { x: 5, y: 0 } });
     const robots = [pusher, target];
     const events = moveRobot(pusher, 1, robots, board, 1);
-    // Push off-board kills target but pusher is blocked (position unchanged in push)
+    // Push off-board kills target, pusher advances into vacated space
     expect(target.health).toBe(0);
     expect(target.lives).toBe(GAME.STARTING_LIVES - 1);
-    // Pusher stays in place since the pushed robot's position didn't change
-    expect(pusher.position).toEqual({ x: 5, y: 1 });
+    expect(pusher.position).toEqual({ x: 5, y: 0 });
+    expect(events.some((e) => e.type === 'push' && e.details === 'pushed off board')).toBe(true);
+    expect(events.some((e) => e.type === 'fall' && e.details === 'off board')).toBe(true);
   });
 
   it('push into pit kills pushed robot', () => {
@@ -903,6 +904,265 @@ describe('updateVirtualStatus', () => {
     const robot = createTestRobot({ virtual: false });
     updateVirtualStatus([robot]);
     expect(robot.virtual).toBe(false);
+  });
+});
+
+// --- Pusher extended tests ---
+
+describe('processPushers (extended)', () => {
+  it('chain pushes two robots in line', () => {
+    const board = createTestBoard();
+    setTile(board, 5, 5, {
+      type: 'floor',
+      sideFeatures: [{ type: 'pusher', side: 'north', phases: [1] }],
+    });
+    const r1 = createTestRobot({ id: 'r1', position: { x: 5, y: 5 } });
+    const r2 = createTestRobot({ id: 'r2', position: { x: 5, y: 6 } });
+    const robots = [r1, r2];
+    const events = processPushers(robots, board, 1);
+    // Pusher on north side pushes south — r1 to (5,6), r2 chain-pushed to (5,7)
+    expect(r1.position).toEqual({ x: 5, y: 6 });
+    expect(r2.position).toEqual({ x: 5, y: 7 });
+    expect(events.filter((e) => e.type === 'push')).toHaveLength(2);
+  });
+
+  it('pushes robot off board — robot dies', () => {
+    const board = createTestBoard();
+    setTile(board, 5, 11, {
+      type: 'floor',
+      sideFeatures: [{ type: 'pusher', side: 'north', phases: [1] }],
+    });
+    const robot = createTestRobot({ position: { x: 5, y: 11 } });
+    const events = processPushers([robot], board, 1);
+    // Pusher on north side pushes south — off the south edge (y=12 out of bounds)
+    expect(robot.health).toBe(0);
+    expect(robot.lives).toBe(GAME.STARTING_LIVES - 1);
+    expect(events.some((e) => e.type === 'fall' && e.details === 'off board')).toBe(true);
+  });
+});
+
+// --- Conveyor off-board ---
+
+describe('processAllConveyors (off-board)', () => {
+  it('conveyor pointing off west edge kills robot', () => {
+    const board = createTestBoard();
+    setTile(board, 0, 5, { type: 'conveyor', direction: 'west' });
+    const robot = createTestRobot({ position: { x: 0, y: 5 } });
+    const events = processAllConveyors([robot], board, 1);
+    expect(robot.health).toBe(0);
+    expect(robot.lives).toBe(GAME.STARTING_LIVES - 1);
+    expect(events.some((e) => e.type === 'fall' && e.details === 'off board')).toBe(true);
+  });
+
+  it('express conveyor pointing off north edge kills robot', () => {
+    const board = createTestBoard();
+    setTile(board, 5, 0, { type: 'express_conveyor', direction: 'north' });
+    const robot = createTestRobot({ position: { x: 5, y: 0 } });
+    const events = processExpressConveyors([robot], board, 1);
+    expect(robot.health).toBe(0);
+    expect(events.some((e) => e.type === 'fall')).toBe(true);
+  });
+});
+
+// --- Current extended tests ---
+
+describe('processCurrents (extended)', () => {
+  it('emits event type "current" not "conveyor"', () => {
+    const board = createTestBoard();
+    setTile(board, 5, 5, { type: 'current', direction: 'east' });
+    const robot = createTestRobot({ position: { x: 5, y: 5 } });
+    const events = processCurrents([robot], board, 1);
+    expect(events[0].type).toBe('current');
+  });
+
+  it('current pointing off board kills robot', () => {
+    const board = createTestBoard();
+    setTile(board, 11, 5, { type: 'current', direction: 'east' });
+    const robot = createTestRobot({ position: { x: 11, y: 5 } });
+    const events = processCurrents([robot], board, 1);
+    expect(robot.health).toBe(0);
+    expect(robot.lives).toBe(GAME.STARTING_LIVES - 1);
+    expect(events.some((e) => e.type === 'fall' && e.details === 'off board')).toBe(true);
+  });
+
+  it('current into pit kills robot', () => {
+    const board = createTestBoard();
+    setTile(board, 5, 5, { type: 'current', direction: 'east' });
+    setTile(board, 6, 5, { type: 'pit' });
+    const robot = createTestRobot({ position: { x: 5, y: 5 } });
+    const events = processCurrents([robot], board, 1);
+    expect(robot.health).toBe(0);
+    expect(events.some((e) => e.type === 'fall' && e.details === 'pit')).toBe(true);
+  });
+});
+
+// --- Drain / radioactive_drain ---
+
+describe('drain tiles', () => {
+  it('walking into drain kills robot', () => {
+    const board = createTestBoard();
+    setTile(board, 5, 4, { type: 'drain' });
+    const robot = createTestRobot({ direction: 'north', position: { x: 5, y: 5 } });
+    const events = moveRobot(robot, 1, [robot], board, 1);
+    expect(robot.health).toBe(0);
+    expect(events.some((e) => e.type === 'fall' && e.details === 'pit')).toBe(true);
+  });
+
+  it('walking into radioactive_drain kills robot', () => {
+    const board = createTestBoard();
+    setTile(board, 5, 4, { type: 'radioactive_drain' });
+    const robot = createTestRobot({ direction: 'north', position: { x: 5, y: 5 } });
+    const events = moveRobot(robot, 1, [robot], board, 1);
+    expect(robot.health).toBe(0);
+    expect(events.some((e) => e.type === 'fall' && e.details === 'pit')).toBe(true);
+  });
+
+  it('push into drain kills pushed robot', () => {
+    const board = createTestBoard();
+    setTile(board, 5, 4, { type: 'drain' });
+    const pusher = createTestRobot({ id: 'r1', direction: 'north', position: { x: 5, y: 6 } });
+    const target = createTestRobot({ id: 'r2', position: { x: 5, y: 5 } });
+    const robots = [pusher, target];
+    moveRobot(pusher, 1, robots, board, 1);
+    expect(target.health).toBe(0);
+    expect(pusher.position).toEqual({ x: 5, y: 5 });
+  });
+
+  it('conveyor into drain kills robot', () => {
+    const board = createTestBoard();
+    setTile(board, 5, 5, { type: 'conveyor', direction: 'east' });
+    setTile(board, 6, 5, { type: 'drain' });
+    const robot = createTestRobot({ position: { x: 5, y: 5 } });
+    processAllConveyors([robot], board, 1);
+    expect(robot.health).toBe(0);
+  });
+});
+
+// --- Trap pit ---
+
+describe('trap_pit', () => {
+  it('kills robot on active phase', () => {
+    const board = createTestBoard();
+    setTile(board, 5, 4, { type: 'trap_pit', phases: [1, 3, 5] });
+    const robot = createTestRobot({ direction: 'north', position: { x: 5, y: 5 } });
+    const events = moveRobot(robot, 1, [robot], board, 1);
+    expect(robot.health).toBe(0);
+    expect(events.some((e) => e.type === 'fall' && e.details === 'pit')).toBe(true);
+  });
+
+  it('does not kill robot on inactive phase', () => {
+    const board = createTestBoard();
+    setTile(board, 5, 4, { type: 'trap_pit', phases: [1, 3, 5] });
+    const robot = createTestRobot({ direction: 'north', position: { x: 5, y: 5 } });
+    moveRobot(robot, 1, [robot], board, 2);
+    expect(robot.health).toBe(GAME.STARTING_HEALTH);
+    expect(robot.position).toEqual({ x: 5, y: 4 });
+  });
+
+  it('active on non-phase-1 register', () => {
+    const board = createTestBoard();
+    setTile(board, 5, 4, { type: 'trap_pit', phases: [2, 4] });
+    const robot = createTestRobot({ direction: 'north', position: { x: 5, y: 5 } });
+    moveRobot(robot, 1, [robot], board, 4);
+    expect(robot.health).toBe(0);
+  });
+
+  it('no phases array defaults to always closed (safe)', () => {
+    const board = createTestBoard();
+    setTile(board, 5, 4, { type: 'trap_pit' });
+    const robot = createTestRobot({ direction: 'north', position: { x: 5, y: 5 } });
+    moveRobot(robot, 1, [robot], board, 1);
+    // No phases = phases?.includes() returns false, so not a pit
+    expect(robot.health).toBe(GAME.STARTING_HEALTH);
+    expect(robot.position).toEqual({ x: 5, y: 4 });
+  });
+
+  it('conveyor into trap_pit on active phase kills robot', () => {
+    const board = createTestBoard();
+    setTile(board, 5, 5, { type: 'conveyor', direction: 'east' });
+    setTile(board, 6, 5, { type: 'trap_pit', phases: [1] });
+    const robot = createTestRobot({ position: { x: 5, y: 5 } });
+    processAllConveyors([robot], board, 1);
+    expect(robot.health).toBe(0);
+  });
+
+  it('conveyor into trap_pit on inactive phase — robot survives', () => {
+    const board = createTestBoard();
+    setTile(board, 5, 5, { type: 'conveyor', direction: 'east' });
+    setTile(board, 6, 5, { type: 'trap_pit', phases: [1] });
+    const robot = createTestRobot({ position: { x: 5, y: 5 } });
+    processAllConveyors([robot], board, 2);
+    expect(robot.health).toBe(GAME.STARTING_HEALTH);
+    expect(robot.position).toEqual({ x: 6, y: 5 });
+  });
+
+  it('push into trap_pit on active phase kills robot', () => {
+    const board = createTestBoard();
+    setTile(board, 5, 4, { type: 'trap_pit', phases: [1] });
+    const pusher = createTestRobot({ id: 'r1', direction: 'north', position: { x: 5, y: 6 } });
+    const target = createTestRobot({ id: 'r2', position: { x: 5, y: 5 } });
+    const robots = [pusher, target];
+    moveRobot(pusher, 1, robots, board, 1);
+    expect(target.health).toBe(0);
+    expect(pusher.position).toEqual({ x: 5, y: 5 });
+  });
+});
+
+// --- Randomizer ---
+
+describe('randomizer', () => {
+  it('randomizes card for robot on randomizer tile', () => {
+    const board = createTestBoard();
+    setTile(board, 5, 5, { type: 'randomizer' });
+    const robot = createTestRobot({ id: 'r1', playerId: 'p1', direction: 'north', position: { x: 5, y: 5 } });
+
+    // Mock Math.random to return a deterministic value
+    vi.spyOn(Math, 'random').mockReturnValue(0); // index 0 = 'move1'
+
+    const playerCards = new Map();
+    playerCards.set('p1', { id: 'c1', type: 'u_turn', priority: 100 });
+
+    const events = executeRegister(1, playerCards, [robot], board, []);
+    // With Math.random() = 0, the card becomes move1, so robot moves north
+    expect(robot.position).toEqual({ x: 5, y: 4 });
+
+    vi.restoreAllMocks();
+  });
+
+  it('does NOT randomize card for robot NOT on randomizer tile', () => {
+    const board = createTestBoard();
+    // No randomizer on tile (5,5) — it's a floor
+    const robot = createTestRobot({ id: 'r1', playerId: 'p1', direction: 'north', position: { x: 5, y: 5 } });
+
+    const playerCards = new Map();
+    playerCards.set('p1', { id: 'c1', type: 'u_turn', priority: 100 });
+
+    executeRegister(1, playerCards, [robot], board, []);
+    // u_turn should execute normally — robot turns south
+    expect(robot.direction).toBe('south');
+    expect(robot.position).toEqual({ x: 5, y: 5 });
+  });
+
+  it('only affects robot on the randomizer tile, not others', () => {
+    const board = createTestBoard();
+    setTile(board, 5, 5, { type: 'randomizer' });
+    const r1 = createTestRobot({ id: 'r1', playerId: 'p1', direction: 'north', position: { x: 5, y: 5 } });
+    const r2 = createTestRobot({ id: 'r2', playerId: 'p2', direction: 'north', position: { x: 3, y: 5 } });
+
+    vi.spyOn(Math, 'random').mockReturnValue(0); // move1
+
+    const playerCards = new Map();
+    playerCards.set('p1', { id: 'c1', type: 'u_turn', priority: 100 });
+    playerCards.set('p2', { id: 'c2', type: 'u_turn', priority: 50 });
+
+    executeRegister(1, playerCards, [r1, r2], board, []);
+    // r1 on randomizer gets move1 (moves north)
+    expect(r1.position).toEqual({ x: 5, y: 4 });
+    // r2 NOT on randomizer keeps u_turn
+    expect(r2.direction).toBe('south');
+    expect(r2.position).toEqual({ x: 3, y: 5 });
+
+    vi.restoreAllMocks();
   });
 });
 

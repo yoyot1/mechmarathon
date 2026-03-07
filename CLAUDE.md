@@ -155,6 +155,9 @@ pnpm --filter @mechmarathon/server add <package>
 - [x] Test helpers (`packages/shared/src/game/__tests__/helpers.js`)
 - [x] Foundation tests: movement, deck, board, options (104 tests)
 - [x] Core execution tests: 88 tests (executeCard, moveRobot, push, conveyors, gears, pushers, crushers, flamers, lasers, checkpoints, repair, radiation, death/respawn, register execution, win condition, virtual status)
+- [x] Per-element review session 1: 21 new tests, 3 bug fixes (213 total tests)
+  - Fixed: push-off-board (pusher now advances), conveyor off-board (now kills), current event type (`'current'` not `'conveyor'`) + off-board death
+  - New coverage: pusher chain/off-board, drain/radioactive_drain, trap_pit (7 tests), randomizer
 - [x] Board editor undo/redo + keyboard shortcuts
 - [x] Graphics abstraction layer (tile renderer registry, 3 enhanced renderers: floor, pit, conveyor)
 
@@ -162,7 +165,7 @@ pnpm --filter @mechmarathon/server add <package>
 - [x] Session 2: Core execution tests (executeCard, moveRobot, push mechanics, death/respawn, register execution)
 - [x] Session 3: Undo/redo system + keyboard shortcut framework for board editor
 - [x] Session 4: Graphics abstraction layer (tile renderer registry, enhanced renderers)
-- [ ] Review all execution tests for correctness against RoboRally rules (known issue: push-off-board should let pusher advance; other tests may also match implementation rather than correct behavior)
-- [ ] Per-element systematic review: TDD approach — define correct behavior tests first, then fix implementation to match
+- [x] Per-element review session 1: push, conveyor, current, drain, trap_pit, randomizer (done)
+- [ ] Per-element review session 2: ledge, teleporter, repulsor, portal, water, oil_slick
 - [ ] Implement reputation updates on game completion
 - [ ] Create the 59 official RoboRally board definitions

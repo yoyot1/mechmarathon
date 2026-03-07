@@ -252,6 +252,7 @@ function pushRobotInDirection(robot, direction, robots, board, registerIndex) {
   // Out of bounds → pushed off
   if (!isInBounds(board, dest)) {
     const from = { ...robot.position };
+    robot.position = dest;
     events.push({ type: 'push', robotId: robot.id, from, details: 'pushed off board' });
     events.push({ type: 'fall', robotId: robot.id, from, details: 'off board' });
     killRobot(robot);
@@ -329,7 +330,10 @@ function processConveyorType(robots, board, type, registerIndex) {
     const delta = directionDelta(tile.direction);
     const dest = { x: robot.position.x + delta.x, y: robot.position.y + delta.y };
 
-    if (!isInBounds(board, dest)) continue;
+    if (!isInBounds(board, dest)) {
+      moves.set(robot.id, { robot, from: { ...robot.position }, to: dest, offBoard: true });
+      continue;
+    }
 
     moves.set(robot.id, { robot, from: { ...robot.position }, to: dest, sourceTile: tile });
   }
@@ -337,6 +341,7 @@ function processConveyorType(robots, board, type, registerIndex) {
   // Detect destination conflicts — if two robots would move to the same cell, cancel both
   const destCounts = new Map();
   for (const [robotId, move] of moves) {
+    if (move.offBoard) continue;
     const key = `${move.to.x},${move.to.y}`;
     const list = destCounts.get(key) ?? [];
     list.push(robotId);
@@ -345,6 +350,7 @@ function processConveyorType(robots, board, type, registerIndex) {
 
   // Also cancel if destination has a stationary robot (one not being conveyed)
   for (const [robotId, move] of moves) {
+    if (move.offBoard) continue;
     const stationary = findRobotAt(robots, move.to, robotId);
     if (stationary && !moves.has(stationary.id)) {
       // Destination occupied by non-conveyed robot, cancel
@@ -361,6 +367,14 @@ function processConveyorType(robots, board, type, registerIndex) {
 
   // Execute remaining moves + conveyor curve rotation
   for (const [, move] of moves) {
+    // Off-board: kill the robot
+    if (move.offBoard) {
+      events.push({ type: 'conveyor', robotId: move.robot.id, from: move.from, to: move.to });
+      events.push({ type: 'fall', robotId: move.robot.id, from: move.from, details: 'off board' });
+      killRobot(move.robot);
+      continue;
+    }
+
     move.robot.position = { ...move.to };
     events.push({ type: 'conveyor', robotId: move.robot.id, from: move.from, to: move.to });
 
@@ -455,7 +469,10 @@ export function processCurrents(robots, board, registerIndex) {
     const delta = directionDelta(tile.direction);
     const dest = { x: robot.position.x + delta.x, y: robot.position.y + delta.y };
 
-    if (!isInBounds(board, dest)) continue;
+    if (!isInBounds(board, dest)) {
+      moves.set(robot.id, { robot, from: { ...robot.position }, to: dest, offBoard: true });
+      continue;
+    }
 
     moves.set(robot.id, { robot, from: { ...robot.position }, to: dest });
   }
@@ -463,6 +480,7 @@ export function processCurrents(robots, board, registerIndex) {
   // Conflict resolution: cancel if two robots would land on the same cell
   const destCounts = new Map();
   for (const [robotId, move] of moves) {
+    if (move.offBoard) continue;
     const key = `${move.to.x},${move.to.y}`;
     const list = destCounts.get(key) ?? [];
     list.push(robotId);
@@ -471,6 +489,7 @@ export function processCurrents(robots, board, registerIndex) {
 
   // Cancel if destination has a stationary robot
   for (const [robotId, move] of moves) {
+    if (move.offBoard) continue;
     const stationary = findRobotAt(robots, move.to, robotId);
     if (stationary && !moves.has(stationary.id)) {
       moves.delete(robotId);
@@ -486,8 +505,16 @@ export function processCurrents(robots, board, registerIndex) {
 
   // Execute remaining moves
   for (const [, move] of moves) {
+    // Off-board: kill the robot
+    if (move.offBoard) {
+      events.push({ type: 'current', robotId: move.robot.id, from: move.from, to: move.to });
+      events.push({ type: 'fall', robotId: move.robot.id, from: move.from, details: 'off board' });
+      killRobot(move.robot);
+      continue;
+    }
+
     move.robot.position = { ...move.to };
-    events.push({ type: 'conveyor', robotId: move.robot.id, from: move.from, to: move.to });
+    events.push({ type: 'current', robotId: move.robot.id, from: move.from, to: move.to });
 
     if (isPit(board, move.to, registerIndex)) {
       events.push({ type: 'fall', robotId: move.robot.id, from: move.to, details: 'pit' });

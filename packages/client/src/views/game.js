@@ -55,7 +55,7 @@ function formatEvent(ev) {
     case 'respawn': return `${name} respawned`;
     case 'conveyor': return `Conveyor moved ${name}`;
     case 'gear': return `Gear rotated ${name} ${ev.details}`;
-    case 'checkpoint': return `${name} reached ${ev.details}`;
+    case 'flag': return `${name} reached ${ev.details}`;
     case 'repair': return `${name} repaired`;
     default: return `${name}: ${ev.type}`;
   }
@@ -69,7 +69,7 @@ const legendItems = [
   { cls: 'tile-gear_ccw', label: 'Gear CCW', arrow: '\u21BA' },
   { cls: 'tile-pit', label: 'Pit', arrow: '\u2716' },
   { cls: 'tile-repair', label: 'Repair', arrow: '+' },
-  { cls: 'tile-checkpoint', label: 'Checkpoint', arrow: '1', gold: true },
+  { cls: 'tile-flag', label: 'Flag', arrow: '1', gold: true },
   { cls: 'tile-laser', label: 'Laser', arrow: '\u26A1' },
   { cls: 'tile-wall wall-south', label: 'Wall', wallDemo: true },
 ];
@@ -231,7 +231,7 @@ function renderExecutingControls() {
     (e) => e.type === 'move' || e.type === 'rotate' || e.type === 'push' || e.type === 'fall' || e.type === 'respawn',
   );
   const boardElementEvents = game.currentRegisterEvents.filter(
-    (e) => e.type === 'conveyor' || e.type === 'gear' || e.type === 'checkpoint' || e.type === 'repair',
+    (e) => e.type === 'conveyor' || e.type === 'gear' || e.type === 'flag' || e.type === 'repair',
   );
 
   return `
@@ -310,7 +310,7 @@ function renderPlayerInfo() {
         <div class="player-row ${robot.lives <= 0 ? 'dead' : ''} ${robot.playerId === auth.user?.id ? 'me' : ''}">
           <span class="player-dot" style="background-color:${robotColor(robot)}"></span>
           ${robot.playerId === auth.user?.id ? '<span class="you-badge">You</span>' : ''}
-          <span class="player-stats">HP:${robot.health} Lives:${robot.lives} CP:${robot.checkpoint}/${game.gameState.totalCheckpoints}</span>
+          <span class="player-stats">HP:${robot.health} Lives:${robot.lives} F:${robot.flag}/${game.gameState.totalFlags}</span>
           ${robot.virtual ? '<span class="virtual-badge">virtual</span>' : ''}
         </div>
       `).join('')}

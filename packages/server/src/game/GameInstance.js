@@ -1,8 +1,8 @@
 import {
   EVENTS, GAME, SPEED, ROBOT_COLORS,
   createDeck, shuffleDeck, dealCards, executeRegisterSteps, checkWinCondition, updateVirtualStatus,
-  processCheckpoints, handleRobotDeath,
-  DEFAULT_BOARD, getDefaultCheckpoints,
+  processFlags, processFlagRepair, processRepairHeal, handleRobotDeath,
+  DEFAULT_BOARD, getDefaultFlags,
 } from '@mechmarathon/shared';
 
 export class GameInstance {
@@ -33,7 +33,7 @@ export class GameInstance {
         height: boardData.board.height,
         tiles: boardData.board.tiles,
       };
-      this.checkpoints = boardData.checkpoints || getDefaultCheckpoints();
+      this.flags = boardData.flags || getDefaultFlags();
       this.spawnPoints = boardData.spawnPoints || [];
     } else {
       this.board = {
@@ -41,14 +41,14 @@ export class GameInstance {
         height: DEFAULT_BOARD.height,
         tiles: DEFAULT_BOARD.tiles,
       };
-      this.checkpoints = getDefaultCheckpoints();
+      this.flags = getDefaultFlags();
       this.spawnPoints = [];
     }
 
-    // Determine start position: use first spawn point, or first checkpoint
+    // Determine start position: use first spawn point, or first flag
     const startPos = this.spawnPoints.length > 0
       ? this.spawnPoints.sort((a, b) => a.number - b.number)[0].position
-      : this.checkpoints.find((c) => c.number === 1)?.position || { x: 0, y: 0 };
+      : this.flags.find((c) => c.number === 1)?.position || { x: 0, y: 0 };
 
     // Place robots: if we have enough spawn points, spread them; otherwise all on startPos
     const sortedSpawns = [...this.spawnPoints].sort((a, b) => a.number - b.number);
@@ -62,14 +62,14 @@ export class GameInstance {
         direction: 'north',
         health: GAME.STARTING_HEALTH,
         lives: GAME.STARTING_LIVES,
-        checkpoint: 0,
+        flag: 0,
         virtual: true,
         archivePosition: { ...pos },
       };
     });
 
-    // Auto-capture checkpoint 1 since robots start on it (if positioned on it)
-    processCheckpoints(this.robots, this.checkpoints);
+    // Auto-capture flag 1 since robots start on it (if positioned on it)
+    processFlags(this.robots, this.flags);
 
     if (botPlayerIds) {
       for (const id of botPlayerIds) this.botPlayerIds.add(id);
@@ -279,28 +279,32 @@ export class GameInstance {
         if (card) playerCards.set(robot.playerId, card);
       }
 
-      const steps = executeRegisterSteps(reg, playerCards, this.robots, this.board, this.checkpoints);
+      const steps = executeRegisterSteps(reg, playerCards, this.robots, this.board, this.flags);
       updateVirtualStatus(this.robots);
       allRegisters.push({ registerIndex: reg, steps });
     }
 
-    // After all registers: check the final checkpoint.
+    // After all registers: check the final flag.
     // Credit it if a robot is standing on it (no archive update for the final flag).
-    const maxCp = this.checkpoints.length > 0
-      ? Math.max(...this.checkpoints.map((c) => c.number))
+    const maxFlag = this.flags.length > 0
+      ? Math.max(...this.flags.map((c) => c.number))
       : 0;
     for (const robot of this.robots) {
       if (robot.lives <= 0 || robot.health <= 0) continue;
-      const nextCp = robot.checkpoint + 1;
-      if (nextCp !== maxCp) continue;
-      const cp = this.checkpoints.find((c) => c.number === nextCp);
-      if (cp && robot.position.x === cp.position.x && robot.position.y === cp.position.y) {
-        robot.checkpoint = nextCp;
+      const nextFlag = robot.flag + 1;
+      if (nextFlag !== maxFlag) continue;
+      const flag = this.flags.find((c) => c.number === nextFlag);
+      if (flag && robot.position.x === flag.position.x && robot.position.y === flag.position.y) {
+        robot.flag = nextFlag;
         // No archive update for the final flag
       }
     }
 
-    const winnerId = checkWinCondition(this.robots, this.checkpoints.length);
+    // End-of-turn: heal robots on repair sites and flags
+    processRepairHeal(this.robots, this.board);
+    processFlagRepair(this.robots, this.flags);
+
+    const winnerId = checkWinCondition(this.robots, this.flags.length);
 
     if (this.debugMode) {
       // Build a flat list of all steps across all registers for navigation
@@ -567,8 +571,8 @@ export class GameInstance {
       phase: this.phase,
       currentRegister: 0,
       round: this.round,
-      totalCheckpoints: this.checkpoints.length,
-      checkpoints: this.checkpoints,
+      totalFlags: this.flags.length,
+      flags: this.flags,
       winnerId: this.winnerId,
       executionSpeed: this.executionSpeed,
       pendingDirectionChoices: [...this.pendingDirectionChoices],

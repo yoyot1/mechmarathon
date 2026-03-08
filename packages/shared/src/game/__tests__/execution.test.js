@@ -12,11 +12,14 @@ import {
   processFlamers,
   processBoardLasers,
   processRobotLasers,
-  processCheckpoints,
-  processRepair,
+  processFlags,
+  processRepairArchive,
+  processRepairHeal,
+  processFlagRepair,
   processRadiation,
   processRadioactiveWaste,
   processChopShop,
+  processRadioactiveWasteOptionDraw,
   handleRobotDeath,
   executeRegister,
   checkWinCondition,
@@ -92,33 +95,66 @@ describe('executeCard', () => {
     expect(events).toEqual([]);
   });
 
-  it('triples movement on teleporter tile', () => {
+  it('move1 on teleporter adds +2 for 3 steps', () => {
     const board = createTestBoard();
     setTile(board, 5, 5, { type: 'teleporter' });
     const robot = createTestRobot({ direction: 'north', position: { x: 5, y: 5 } });
     const card = { id: 'c1', type: 'move1', priority: 100 };
     executeCard(card, robot, [robot], board, 1);
+    // 1 + 2 = 3 steps north: y goes from 5 to 2
     expect(robot.position).toEqual({ x: 5, y: 2 });
   });
 
-  it('move2 on teleporter triples to 6 steps', () => {
+  it('move2 on teleporter adds +2 for 4 steps', () => {
     const board = createTestBoard();
     setTile(board, 5, 8, { type: 'teleporter' });
     const robot = createTestRobot({ direction: 'north', position: { x: 5, y: 8 } });
     const card = { id: 'c2', type: 'move2', priority: 200 };
     executeCard(card, robot, [robot], board, 1);
-    // 2 * 3 = 6 steps north: y goes from 8 to 2
-    expect(robot.position).toEqual({ x: 5, y: 2 });
+    // 2 + 2 = 4 steps north: y goes from 8 to 4
+    expect(robot.position).toEqual({ x: 5, y: 4 });
   });
 
-  it('backup on teleporter triples to 3 steps backward', () => {
+  it('move3 on teleporter adds +2 for 5 steps', () => {
+    const board = createTestBoard();
+    setTile(board, 5, 8, { type: 'teleporter' });
+    const robot = createTestRobot({ direction: 'north', position: { x: 5, y: 8 } });
+    const card = { id: 'c3', type: 'move3', priority: 300 };
+    executeCard(card, robot, [robot], board, 1);
+    // 3 + 2 = 5 steps north: y goes from 8 to 3
+    expect(robot.position).toEqual({ x: 5, y: 3 });
+  });
+
+  it('backup on teleporter becomes 2 steps backward', () => {
     const board = createTestBoard();
     setTile(board, 5, 3, { type: 'teleporter' });
     const robot = createTestRobot({ direction: 'north', position: { x: 5, y: 3 } });
-    const card = { id: 'c3', type: 'backup', priority: 50 };
+    const card = { id: 'c4', type: 'backup', priority: 50 };
     executeCard(card, robot, [robot], board, 1);
-    // Backup (-1) * 3 = 3 steps south: y goes from 3 to 6
-    expect(robot.position).toEqual({ x: 5, y: 6 });
+    // backup becomes -2 (not -3): 2 steps south: y goes from 3 to 5
+    expect(robot.position).toEqual({ x: 5, y: 5 });
+  });
+
+  it('teleporter blocked by robot at first destination — normal movement', () => {
+    const board = createTestBoard();
+    setTile(board, 5, 5, { type: 'teleporter' });
+    const robot = createTestRobot({ id: 'r1', direction: 'north', position: { x: 5, y: 5 } });
+    const blocker = createTestRobot({ id: 'r2', position: { x: 5, y: 4 } });
+    const card = { id: 'c5', type: 'move1', priority: 100 };
+    executeCard(card, robot, [robot, blocker], board, 1);
+    // Blocker at first dest: no bonus, normal move1 pushes blocker
+    expect(robot.position).toEqual({ x: 5, y: 4 });
+    expect(blocker.position).toEqual({ x: 5, y: 3 });
+  });
+
+  it('teleporter blocked by wall — normal movement', () => {
+    const board = createTestBoard();
+    setTile(board, 5, 5, { type: 'teleporter', walls: ['north'] });
+    const robot = createTestRobot({ direction: 'north', position: { x: 5, y: 5 } });
+    const card = { id: 'c6', type: 'move1', priority: 100 };
+    executeCard(card, robot, [robot], board, 1);
+    // Wall blocks: no bonus, no movement at all
+    expect(robot.position).toEqual({ x: 5, y: 5 });
   });
 });
 
@@ -341,50 +377,92 @@ describe('push mechanics', () => {
   });
 });
 
-// --- Repulsor ---
+// --- Repulsor (side feature) ---
 
 describe('repulsor', () => {
-  it('bounces robot back to origin', () => {
-    const board = createTestBoard();
-    setTile(board, 5, 4, { type: 'repulsor' });
-    const robot = createTestRobot({ direction: 'north', position: { x: 5, y: 5 } });
-    moveRobot(robot, 1, [robot], board, 1);
-    expect(robot.position).toEqual({ x: 5, y: 5 });
-  });
+  // Helper: add a repulsor side feature to a tile edge
+  function addRepulsor(board, x, y, side) {
+    const tile = board.tiles[y][x];
+    if (!tile.sideFeatures) tile.sideFeatures = [];
+    tile.sideFeatures.push({ type: 'repulsor', side });
+  }
 
-  it('bounce generates repulsor bounce event', () => {
+  it('blocks movement through repulsor edge and pushes back by card value', () => {
     const board = createTestBoard();
-    setTile(board, 5, 4, { type: 'repulsor' });
+    // Repulsor on south side of (5,4) — blocks entry from south
+    addRepulsor(board, 5, 4, 'south');
     const robot = createTestRobot({ direction: 'north', position: { x: 5, y: 5 } });
     const events = moveRobot(robot, 1, [robot], board, 1);
-    // Should have: move to repulsor, then bounce move back
-    const bounceEvent = events.find((e) => e.details === 'repulsor bounce');
-    expect(bounceEvent).toBeDefined();
-    expect(bounceEvent.from).toEqual({ x: 5, y: 4 });
-    expect(bounceEvent.to).toEqual({ x: 5, y: 5 });
+    // Blocked at edge, pushed back 1 step south (full card value = 1)
+    expect(robot.position).toEqual({ x: 5, y: 6 });
+    const repulsorEvent = events.find((e) => e.type === 'repulsor');
+    expect(repulsorEvent).toBeDefined();
   });
 
-  it('repulsor at board edge — bounce out of bounds, robot stays on repulsor', () => {
+  it('push-back distance equals full original card value (move3 → push back 3)', () => {
     const board = createTestBoard();
-    // Repulsor at top edge, robot approaches from south
-    setTile(board, 5, 0, { type: 'repulsor' });
-    const robot = createTestRobot({ direction: 'north', position: { x: 5, y: 1 } });
-    moveRobot(robot, 1, [robot], board, 1);
-    // Bounce direction is south, but bounceDest = (5, -1) — out of bounds check fails
-    // Actually bounceDest = dest + bounceDir delta = (5,0) + south = (5,1) which IS in bounds
-    // So robot bounces back to (5,1)
-    expect(robot.position).toEqual({ x: 5, y: 1 });
-  });
-
-  it('move2 onto repulsor — robot bounces back each step', () => {
-    const board = createTestBoard();
-    setTile(board, 5, 4, { type: 'repulsor' });
+    // Repulsor on south side of (5,3) — robot at (5,5) moving north with move3
+    addRepulsor(board, 5, 3, 'south');
     const robot = createTestRobot({ direction: 'north', position: { x: 5, y: 5 } });
+    // move3: step 1 to (5,4), step 2 hits repulsor on (5,3) south edge
+    // Push back = 3 (full card value) steps south from (5,4)
+    const events = moveRobot(robot, 3, [robot], board, 1);
+    expect(robot.position).toEqual({ x: 5, y: 7 });
+  });
+
+  it('does NOT affect robot entering from non-repulsor side', () => {
+    const board = createTestBoard();
+    // Repulsor on east side of (5,4) — only blocks east entry
+    addRepulsor(board, 5, 4, 'east');
+    const robot = createTestRobot({ direction: 'north', position: { x: 5, y: 5 } });
+    // Moving north (entering from south side), should NOT be blocked
+    moveRobot(robot, 1, [robot], board, 1);
+    expect(robot.position).toEqual({ x: 5, y: 4 });
+  });
+
+  it('repulsor on source tile exit side blocks and pushes back', () => {
+    const board = createTestBoard();
+    // Repulsor on north side of (5,5) — blocks exit northward
+    addRepulsor(board, 5, 5, 'north');
+    const robot = createTestRobot({ direction: 'north', position: { x: 5, y: 5 } });
+    const events = moveRobot(robot, 1, [robot], board, 1);
+    // Blocked at own tile's north edge, pushed back 1 step south
+    expect(robot.position).toEqual({ x: 5, y: 6 });
+  });
+
+  it('push-back chain-pushes other robots', () => {
+    const board = createTestBoard();
+    addRepulsor(board, 5, 4, 'south');
+    const r1 = createTestRobot({ id: 'r1', direction: 'north', position: { x: 5, y: 5 } });
+    const r2 = createTestRobot({ id: 'r2', direction: 'north', position: { x: 5, y: 6 } });
+    // r1 moves north, hits repulsor, pushed back 1 step south to (5,6) where r2 is
+    // r2 gets chain-pushed south to (5,7)
+    moveRobot(r1, 1, [r1, r2], board, 1);
+    expect(r1.position).toEqual({ x: 5, y: 6 });
+    expect(r2.position).toEqual({ x: 5, y: 7 });
+  });
+
+  it('push-back off board kills robot', () => {
+    const board = createTestBoard();
+    // Repulsor on south side of (5,10) — robot at (5,11) bottom row
+    addRepulsor(board, 5, 10, 'south');
+    const robot = createTestRobot({ direction: 'north', position: { x: 5, y: 11 } });
+    // move2: step 1 to (5,10) hits repulsor, push back 2 steps south from (5,11)
+    // (5,11) → (5,12) off board → death
     moveRobot(robot, 2, [robot], board, 1);
-    // Step 1: move to (5,4) repulsor → bounce back to (5,5)
-    // Step 2: move to (5,4) repulsor → bounce back to (5,5)
-    expect(robot.position).toEqual({ x: 5, y: 5 });
-    expect(robot.health).toBe(GAME.STARTING_HEALTH);
+    expect(robot.health).toBe(0);
+    expect(robot.lives).toBe(GAME.STARTING_LIVES - 1);
+  });
+
+  it('remaining movement cancelled after push-back', () => {
+    const board = createTestBoard();
+    addRepulsor(board, 5, 4, 'south');
+    const robot = createTestRobot({ direction: 'north', position: { x: 5, y: 5 } });
+    // move3: step 1 hits repulsor at (5,4) south edge, pushed back 3 steps
+    // Remaining 2 steps of forward movement are cancelled
+    moveRobot(robot, 3, [robot], board, 1);
+    // Robot should be at (5,5) + 3 south = (5,8), NOT continue north after push-back
+    expect(robot.position).toEqual({ x: 5, y: 8 });
   });
 });
 
@@ -852,52 +930,73 @@ describe('processRobotLasers', () => {
   });
 });
 
-// --- Checkpoints ---
+// --- Flags ---
 
-describe('processCheckpoints', () => {
-  it('increments checkpoint when robot is on next checkpoint', () => {
-    const checkpoints = [
+describe('processFlags', () => {
+  it('increments flag when robot is on next flag', () => {
+    const flags = [
       { number: 1, position: { x: 3, y: 3 } },
       { number: 2, position: { x: 7, y: 7 } },
     ];
-    const robot = createTestRobot({ position: { x: 3, y: 3 }, checkpoint: 0 });
-    const events = processCheckpoints([robot], checkpoints);
-    expect(robot.checkpoint).toBe(1);
+    const robot = createTestRobot({ position: { x: 3, y: 3 }, flag: 0 });
+    const events = processFlags([robot], flags);
+    expect(robot.flag).toBe(1);
     expect(robot.archivePosition).toEqual({ x: 3, y: 3 });
-    expect(events.some((e) => e.type === 'checkpoint')).toBe(true);
+    expect(events.some((e) => e.type === 'flag')).toBe(true);
   });
 
-  it('does not skip checkpoints', () => {
-    const checkpoints = [
+  it('does not skip flags', () => {
+    const flags = [
       { number: 1, position: { x: 3, y: 3 } },
       { number: 2, position: { x: 7, y: 7 } },
     ];
-    const robot = createTestRobot({ position: { x: 7, y: 7 }, checkpoint: 0 });
-    processCheckpoints([robot], checkpoints);
-    expect(robot.checkpoint).toBe(0); // must get checkpoint 1 first
+    const robot = createTestRobot({ position: { x: 7, y: 7 }, flag: 0 });
+    processFlags([robot], flags);
+    expect(robot.flag).toBe(0); // must get flag 1 first
   });
 
-  it('excludeFinal skips the last checkpoint', () => {
-    const checkpoints = [
+  it('excludeFinal skips the last flag', () => {
+    const flags = [
       { number: 1, position: { x: 3, y: 3 } },
       { number: 2, position: { x: 7, y: 7 } },
     ];
-    const robot = createTestRobot({ position: { x: 7, y: 7 }, checkpoint: 1 });
-    processCheckpoints([robot], checkpoints, true);
-    expect(robot.checkpoint).toBe(1); // checkpoint 2 excluded
+    const robot = createTestRobot({ position: { x: 7, y: 7 }, flag: 1 });
+    processFlags([robot], flags, true);
+    expect(robot.flag).toBe(1); // flag 2 excluded
   });
 });
 
-// --- Repair ---
+// --- Repair Archive ---
 
-describe('processRepair', () => {
-  it('restores 1 health on repair tile', () => {
+describe('processRepairArchive', () => {
+  it('sets archivePosition on repair tile, does NOT heal', () => {
+    const board = createTestBoard();
+    setTile(board, 5, 5, { type: 'repair' });
+    const robot = createTestRobot({ position: { x: 5, y: 5 }, health: 8, archivePosition: { x: 0, y: 0 } });
+    const events = processRepairArchive([robot], board);
+    expect(robot.archivePosition).toEqual({ x: 5, y: 5 });
+    expect(robot.health).toBe(8); // NOT healed
+    expect(events.some((e) => e.type === 'repair_archive')).toBe(true);
+  });
+
+  it('does nothing on non-repair tile', () => {
+    const board = createTestBoard();
+    const robot = createTestRobot({ position: { x: 5, y: 5 }, archivePosition: { x: 0, y: 0 } });
+    const events = processRepairArchive([robot], board);
+    expect(robot.archivePosition).toEqual({ x: 0, y: 0 });
+    expect(events).toHaveLength(0);
+  });
+});
+
+// --- Repair Heal ---
+
+describe('processRepairHeal', () => {
+  it('heals 1 HP on repair tile', () => {
     const board = createTestBoard();
     setTile(board, 5, 5, { type: 'repair' });
     const robot = createTestRobot({ position: { x: 5, y: 5 }, health: 8 });
-    const events = processRepair([robot], board);
+    const events = processRepairHeal([robot], board);
     expect(robot.health).toBe(9);
-    expect(robot.archivePosition).toEqual({ x: 5, y: 5 });
     expect(events.some((e) => e.type === 'repair')).toBe(true);
   });
 
@@ -905,15 +1004,42 @@ describe('processRepair', () => {
     const board = createTestBoard();
     setTile(board, 5, 5, { type: 'repair' });
     const robot = createTestRobot({ position: { x: 5, y: 5 }, health: GAME.STARTING_HEALTH });
-    processRepair([robot], board);
+    processRepairHeal([robot], board);
     expect(robot.health).toBe(GAME.STARTING_HEALTH);
   });
 
-  it('does not repair on floor tile', () => {
+  it('does not heal on non-repair tile', () => {
     const board = createTestBoard();
     const robot = createTestRobot({ position: { x: 5, y: 5 }, health: 5 });
-    processRepair([robot], board);
+    processRepairHeal([robot], board);
     expect(robot.health).toBe(5);
+  });
+});
+
+// --- Flag Repair ---
+
+describe('processFlagRepair', () => {
+  it('heals 1 HP when on flag position', () => {
+    const flags = [{ number: 1, position: { x: 5, y: 5 } }];
+    const robot = createTestRobot({ position: { x: 5, y: 5 }, health: 8 });
+    const events = processFlagRepair([robot], flags);
+    expect(robot.health).toBe(9);
+    expect(events.some((e) => e.type === 'flag_repair')).toBe(true);
+  });
+
+  it('no heal when not on flag', () => {
+    const flags = [{ number: 1, position: { x: 3, y: 3 } }];
+    const robot = createTestRobot({ position: { x: 5, y: 5 }, health: 8 });
+    const events = processFlagRepair([robot], flags);
+    expect(robot.health).toBe(8);
+    expect(events).toHaveLength(0);
+  });
+
+  it('does not exceed max health', () => {
+    const flags = [{ number: 1, position: { x: 5, y: 5 } }];
+    const robot = createTestRobot({ position: { x: 5, y: 5 }, health: GAME.STARTING_HEALTH });
+    processFlagRepair([robot], flags);
+    expect(robot.health).toBe(GAME.STARTING_HEALTH);
   });
 });
 
@@ -978,6 +1104,35 @@ describe('processChopShop', () => {
   });
 });
 
+// --- Radioactive Waste Option Draw ---
+
+describe('processRadioactiveWasteOptionDraw', () => {
+  it('emits option_draw event for robot on radioactive waste', () => {
+    const board = createTestBoard();
+    setTile(board, 5, 5, { type: 'radioactive_waste' });
+    const robot = createTestRobot({ position: { x: 5, y: 5 } });
+    const events = processRadioactiveWasteOptionDraw([robot], board);
+    expect(events).toHaveLength(1);
+    expect(events[0].type).toBe('option_draw');
+    expect(events[0].robotId).toBe('robot-1');
+  });
+
+  it('no event for dead robot on radioactive waste', () => {
+    const board = createTestBoard();
+    setTile(board, 5, 5, { type: 'radioactive_waste' });
+    const robot = createTestRobot({ position: { x: 5, y: 5 }, health: 0 });
+    const events = processRadioactiveWasteOptionDraw([robot], board);
+    expect(events).toHaveLength(0);
+  });
+
+  it('no event when not on radioactive waste', () => {
+    const board = createTestBoard();
+    const robot = createTestRobot({ position: { x: 5, y: 5 } });
+    const events = processRadioactiveWasteOptionDraw([robot], board);
+    expect(events).toHaveLength(0);
+  });
+});
+
 // --- handleRobotDeath ---
 
 describe('handleRobotDeath', () => {
@@ -1007,21 +1162,21 @@ describe('handleRobotDeath', () => {
 // --- checkWinCondition ---
 
 describe('checkWinCondition', () => {
-  it('returns playerId when robot reached all checkpoints', () => {
-    const robot = createTestRobot({ playerId: 'player-1', checkpoint: 3 });
+  it('returns playerId when robot reached all flags', () => {
+    const robot = createTestRobot({ playerId: 'player-1', flag: 3 });
     const result = checkWinCondition([robot], 3);
     expect(result).toBe('player-1');
   });
 
-  it('returns null when no robot has all checkpoints', () => {
-    const robot = createTestRobot({ playerId: 'player-1', checkpoint: 1 });
+  it('returns null when no robot has all flags', () => {
+    const robot = createTestRobot({ playerId: 'player-1', flag: 1 });
     const result = checkWinCondition([robot], 3);
     expect(result).toBeNull();
   });
 
   it('returns first winner when multiple qualify', () => {
-    const r1 = createTestRobot({ id: 'r1', playerId: 'p1', checkpoint: 3 });
-    const r2 = createTestRobot({ id: 'r2', playerId: 'p2', checkpoint: 3 });
+    const r1 = createTestRobot({ id: 'r1', playerId: 'p1', flag: 3 });
+    const r2 = createTestRobot({ id: 'r2', playerId: 'p2', flag: 3 });
     const result = checkWinCondition([r1, r2], 3);
     expect(result).toBe('p1');
   });

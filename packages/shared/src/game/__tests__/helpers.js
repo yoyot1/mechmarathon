@@ -43,7 +43,7 @@ export function createTestRobot(overrides = {}) {
     direction: 'north',
     health: GAME.STARTING_HEALTH,
     lives: GAME.STARTING_LIVES,
-    checkpoint: 0,
+    flag: 0,
     archivePosition: { ...position },
     virtual: false,
     options: [],

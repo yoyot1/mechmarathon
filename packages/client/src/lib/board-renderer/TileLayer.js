@@ -38,7 +38,7 @@ const SYMBOL_STYLE = new TextStyle({
   fontFamily: 'sans-serif',
 });
 
-const CHECKPOINT_STYLE = new TextStyle({
+const FLAG_STYLE = new TextStyle({
   fontSize: 10,
   fill: 0xffd700,
   fontWeight: 'bold',
@@ -59,7 +59,7 @@ export class TileLayer {
     this.container = new Container();
   }
 
-  build(board, checkpoints) {
+  build(board, flags) {
     this.container.removeChildren();
 
     const cellPitch = TILE_SIZE + TILE_GAP;
@@ -95,11 +95,11 @@ export class TileLayer {
     // Laser beams (drawn after all tiles so they render on top)
     this._drawAllLaserBeams(board, cellPitch);
 
-    // Checkpoint overlays
-    for (const cp of checkpoints) {
-      const px = cp.position.x * cellPitch;
-      const py = cp.position.y * cellPitch;
-      this._drawCheckpoint(cp.number, px, py);
+    // Flag overlays
+    for (const fl of flags) {
+      const px = fl.position.x * cellPitch;
+      const py = fl.position.y * cellPitch;
+      this._drawFlag(fl.number, px, py);
     }
   }
 
@@ -450,7 +450,7 @@ export class TileLayer {
     this.container.addChild(g);
   }
 
-  _drawCheckpoint(num, px, py) {
+  _drawFlag(num, px, py) {
     // Badge background
     const badge = new Graphics();
     const badgeSize = 16;
@@ -460,7 +460,7 @@ export class TileLayer {
     this.container.addChild(badge);
 
     // Number
-    const text = new Text({ text: String(num), style: CHECKPOINT_STYLE });
+    const text = new Text({ text: String(num), style: FLAG_STYLE });
     text.anchor.set(0.5, 0.5);
     text.x = bx + badgeSize / 2;
     text.y = by + badgeSize / 2;

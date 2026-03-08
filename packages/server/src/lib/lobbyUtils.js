@@ -19,7 +19,7 @@ export function toLobby(game) {
     mapConfig,
     mapSummary: mapConfig ? {
       boardCount: mapConfig.boards?.length || 0,
-      checkpointCount: mapConfig.checkpoints?.length || 0,
+      flagCount: mapConfig.flags?.length || 0,
       spawnCount: mapConfig.spawnPoints?.length || 0,
       configured: true,
     } : null,

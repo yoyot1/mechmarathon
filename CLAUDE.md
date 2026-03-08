@@ -112,8 +112,8 @@ pnpm --filter @mechmarathon/server add <package>
 - **Programming phase**: Each player receives 9 cards, programs 5 registers, 60-second timer
 - **Execution phase**: All robots execute register 1, then register 2, etc.
 - **Card priority**: Higher priority moves first within each register
-- **Board elements**: Conveyors, gears, lasers, pits, repair sites, checkpoints
-- **Win condition**: First robot to reach all checkpoints in order wins
+- **Board elements**: Conveyors, gears, lasers, pits, repair sites, flags
+- **Win condition**: First robot to reach all flags in order wins
 
 ### Reputation System
 - New accounts start at 100 reputation
@@ -145,7 +145,7 @@ pnpm --filter @mechmarathon/server add <package>
   - Board editor view (tile painter, wall mode, eraser, direction selector)
   - Board library view (Official/Community/My Boards tabs)
   - Board rotation (`rotateBoard`) and multi-board assembly (`assembleMap`)
-  - Map configurator in lobby (host adds boards, sets positions/rotation, places checkpoints + spawns)
+  - Map configurator in lobby (host adds boards, sets positions/rotation, places flags + spawns)
   - Game engine accepts boardData from map config (with default board fallback)
   - Seed script for default "Factory Floor" board
   - New socket events: `LOBBY_MAP_CONFIG`, `LOBBY_MAP_UPDATE`
@@ -154,7 +154,7 @@ pnpm --filter @mechmarathon/server add <package>
 - [x] Vitest configuration (`packages/shared/vitest.config.js`, globals enabled)
 - [x] Test helpers (`packages/shared/src/game/__tests__/helpers.js`)
 - [x] Foundation tests: movement, deck, board, options (104 tests)
-- [x] Core execution tests: 88 tests (executeCard, moveRobot, push, conveyors, gears, pushers, crushers, flamers, lasers, checkpoints, repair, radiation, death/respawn, register execution, win condition, virtual status)
+- [x] Core execution tests: 88 tests (executeCard, moveRobot, push, conveyors, gears, pushers, crushers, flamers, lasers, flags, repair, radiation, death/respawn, register execution, win condition, virtual status)
 - [x] Per-element review session 1: 21 new tests, 3 bug fixes (213 total tests)
   - Fixed: push-off-board (pusher now advances), conveyor off-board (now kills), current event type (`'current'` not `'conveyor'`) + off-board death
   - New coverage: pusher chain/off-board, drain/radioactive_drain, trap_pit (7 tests), randomizer
@@ -167,6 +167,13 @@ pnpm --filter @mechmarathon/server add <package>
   - Elevation/ledge: push off ledge damage, conveyor off ledge damage, lethal ledge fall (3 tests)
 - [x] Board editor undo/redo + keyboard shortcuts
 - [x] Graphics abstraction layer (tile renderer registry, 3 enhanced renderers: floor, pit, conveyor)
+- [x] PDF cross-reference fixes: 6 gameplay corrections, 14 new tests (243 total tests)
+  - Renamed checkpoint → flag across entire codebase (~18 files)
+  - Split processRepair into processRepairArchive (per-register) + processRepairHeal (end-of-turn)
+  - Added processFlagRepair (end-of-turn heal for robots on flags)
+  - Teleporter: changed from ×3 multiplier to +2 bonus, backup becomes -2, blocked if occupied
+  - Repulsor: reworked from tile type to side feature, pushes back by full card value with chain-push
+  - Added processRadioactiveWasteOptionDraw (option card draw event)
 
 ### Next Steps
 - [x] Session 2: Core execution tests (executeCard, moveRobot, push mechanics, death/respawn, register execution)

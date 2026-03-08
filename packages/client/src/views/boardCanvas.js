@@ -15,7 +15,7 @@ let initialized = false;
 let containerEl = null;
 let isAnimating = false;
 let currentBoard = null;
-let currentCheckpoints = null;
+let currentFlags = null;
 
 export async function initBoardCanvas(el, gameState, myPlayerId) {
   if (!el || initialized || !gameState) return;
@@ -47,8 +47,8 @@ export async function initBoardCanvas(el, gameState, myPlayerId) {
   animationQueue = new AnimationQueue(robotLayer, app.ticker);
 
   // Build initial board
-  currentCheckpoints = gameState.checkpoints;
-  tileLayer.build(gameState.board, currentCheckpoints);
+  currentFlags = gameState.flags;
+  tileLayer.build(gameState.board, currentFlags);
   robotLayer.syncRobots(gameState.robots);
 
   fitBoard(gameState);
@@ -100,7 +100,7 @@ export function destroyBoardCanvas() {
   containerEl = null;
   isAnimating = false;
   currentBoard = null;
-  currentCheckpoints = null;
+  currentFlags = null;
 }
 
 export function updateRobots(robots) {
@@ -108,11 +108,11 @@ export function updateRobots(robots) {
   robotLayer.syncRobots(robots);
 }
 
-export function updateBoard(board, checkpoints, gameState) {
+export function updateBoard(board, flags, gameState) {
   if (!tileLayer) return;
   currentBoard = board;
-  currentCheckpoints = checkpoints;
-  tileLayer.build(board, checkpoints);
+  currentFlags = flags;
+  tileLayer.build(board, flags);
   fitBoard(gameState);
 }
 
@@ -137,7 +137,7 @@ export function updateSpeed(speed) {
 
 export function rebuildBoard() {
   if (!tileLayer || !currentBoard) return;
-  tileLayer.build(currentBoard, currentCheckpoints);
+  tileLayer.build(currentBoard, currentFlags);
 }
 
 export function isInitialized() {

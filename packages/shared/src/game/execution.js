@@ -34,15 +34,26 @@ function findRobotAt(robots, pos, excludeId) {
 export function executeCard(card, robot, robots, board, registerIndex) {
   if (!isAlive(robot)) return [];
 
-  // Teleporter: triple movement steps when robot starts on a teleporter tile
+  // Teleporter: +2 bonus if robot starts on teleporter AND first destination is clear
+  let bonus = 0;
   const onTeleporter = getTile(board, robot.position)?.type === 'teleporter';
-  const multiplier = onTeleporter ? 3 : 1;
+  if (onTeleporter && (card.type === 'move1' || card.type === 'move2' || card.type === 'move3' || card.type === 'backup')) {
+    const moveDir = card.type === 'backup' ? oppositeDirection(robot.direction) : robot.direction;
+    // Check if first destination is clear (no wall, no robot)
+    if (!isWallBlocking(board, robot.position, moveDir)) {
+      const delta = directionDelta(moveDir);
+      const firstDest = { x: robot.position.x + delta.x, y: robot.position.y + delta.y };
+      if (isInBounds(board, firstDest) && !findRobotAt(robots, firstDest, robot.id)) {
+        bonus = 2;
+      }
+    }
+  }
 
   switch (card.type) {
-    case 'move1': return moveRobot(robot, 1 * multiplier, robots, board, registerIndex);
-    case 'move2': return moveRobot(robot, 2 * multiplier, robots, board, registerIndex);
-    case 'move3': return moveRobot(robot, 3 * multiplier, robots, board, registerIndex);
-    case 'backup': return moveRobot(robot, -1 * multiplier, robots, board, registerIndex);
+    case 'move1': return moveRobot(robot, 1 + bonus, robots, board, registerIndex);
+    case 'move2': return moveRobot(robot, 2 + bonus, robots, board, registerIndex);
+    case 'move3': return moveRobot(robot, 3 + bonus, robots, board, registerIndex);
+    case 'backup': return moveRobot(robot, bonus > 0 ? -2 : -1, robots, board, registerIndex);
     case 'turn_right': return rotateRobot(robot, 'cw');
     case 'turn_left': return rotateRobot(robot, 'ccw');
     case 'u_turn': return rotateRobot(robot, '180');
@@ -64,7 +75,8 @@ function rotateRobot(robot, rotation) {
 export function moveRobot(robot, steps, robots, board, registerIndex) {
   const events = [];
   const direction = steps >= 0 ? robot.direction : oppositeDirection(robot.direction);
-  let absSteps = Math.abs(steps);
+  const originalSteps = Math.abs(steps);
+  let absSteps = originalSteps;
 
   // Oil slick / water: starting on these tiles negates the first square of movement
   const startTile = getTile(board, robot.position);
@@ -74,10 +86,10 @@ export function moveRobot(robot, steps, robots, board, registerIndex) {
 
   for (let i = 0; i < absSteps; i++) {
     const posBefore = { ...robot.position };
-    const stepEvents = moveOneStep(robot, direction, robots, board, registerIndex);
+    const { events: stepEvents, repulsed } = moveOneStep(robot, direction, robots, board, registerIndex, originalSteps);
     events.push(...stepEvents);
-    // If the robot died (fell in pit / off board), stop
-    if (!isAlive(robot)) break;
+    // If repulsed or robot died, stop all remaining movement
+    if (repulsed || !isAlive(robot)) break;
     // Ramp: going up a ramp costs an extra movement step
     if (!posEqual(posBefore, robot.position)) {
       const destTile = getTile(board, robot.position);
@@ -93,11 +105,20 @@ export function moveRobot(robot, steps, robots, board, registerIndex) {
   return events;
 }
 
-function moveOneStep(robot, direction, robots, board, registerIndex) {
+function moveOneStep(robot, direction, robots, board, registerIndex, originalSteps) {
   const events = [];
 
   // Check wall blocking
-  if (isWallBlocking(board, robot.position, direction)) return events;
+  if (isWallBlocking(board, robot.position, direction)) return { events, repulsed: false };
+
+  // Check repulsor blocking (side feature on exit side of source or entry side of dest)
+  if (isRepulsorBlocking(board, robot.position, direction)) {
+    const pushBackDir = oppositeDirection(direction);
+    const pushBackEvents = pushBackRobot(robot, pushBackDir, originalSteps, robots, board, registerIndex);
+    events.push({ type: 'repulsor', robotId: robot.id, from: { ...robot.position }, details: 'repulsor push-back' });
+    events.push(...pushBackEvents);
+    return { events, repulsed: true };
+  }
 
   const delta = directionDelta(direction);
   const dest = { x: robot.position.x + delta.x, y: robot.position.y + delta.y };
@@ -107,7 +128,7 @@ function moveOneStep(robot, direction, robots, board, registerIndex) {
     const from = { ...robot.position };
     events.push({ type: 'fall', robotId: robot.id, from, details: 'off board' });
     killRobot(robot);
-    return events;
+    return { events, repulsed: false };
   }
 
   // Check for robot at destination (only push non-virtual, and only if we're non-virtual)
@@ -117,7 +138,7 @@ function moveOneStep(robot, direction, robots, board, registerIndex) {
     const pushEvents = pushRobotInDirection(blocking, direction, robots, board, registerIndex);
     // If the blocking robot didn't move (wall blocked), we can't move either
     if (pushEvents.length === 0 || posEqual(blocking.position, dest)) {
-      return events;
+      return { events, repulsed: false };
     }
     events.push(...pushEvents);
   }
@@ -131,7 +152,7 @@ function moveOneStep(robot, direction, robots, board, registerIndex) {
   if (isPit(board, dest, registerIndex)) {
     events.push({ type: 'fall', robotId: robot.id, from: { ...dest }, details: 'pit' });
     killRobot(robot);
-    return events;
+    return { events, repulsed: false };
   }
 
   // Elevation damage: falling from a ledge deals 2 damage
@@ -142,35 +163,12 @@ function moveOneStep(robot, direction, robots, board, registerIndex) {
     if (robot.health <= 0) {
       killRobot(robot);
       events.push({ type: 'fall', robotId: robot.id, from: { ...dest }, details: 'ledge kill' });
-      return events;
+      return { events, repulsed: false };
     }
-  }
-
-  // Repulsor: bounce robot back to where it came from
-  const destTile = getTile(board, dest);
-  if (destTile?.type === 'repulsor') {
-    // Push robot back 1 square in the opposite direction (back to 'from')
-    const bounceDir = oppositeDirection(direction);
-    const bounceDest = { x: dest.x + directionDelta(bounceDir).x, y: dest.y + directionDelta(bounceDir).y };
-    // If the bounce destination is where we came from and is in bounds, move there
-    if (isInBounds(board, bounceDest) && !isWallBlocking(board, dest, bounceDir)) {
-      const blocking = findRobotAt(robots, bounceDest, robot.id);
-      if (blocking && !robot.virtual && !blocking.virtual) {
-        const pushEvents = pushRobotInDirection(blocking, bounceDir, robots, board, registerIndex);
-        if (pushEvents.length === 0 || posEqual(blocking.position, bounceDest)) {
-          // Can't bounce, stay on repulsor
-          return events;
-        }
-        events.push(...pushEvents);
-      }
-      robot.position = bounceDest;
-      events.push({ type: 'move', robotId: robot.id, from: { ...dest }, to: { ...bounceDest }, details: 'repulsor bounce' });
-    }
-    // Remaining movement is cancelled (caller's loop will continue but we signal stop via no further steps)
-    return events;
   }
 
   // Oil slick: slide in movement direction until hitting wall, non-slick tile, robot, or off-board
+  const destTile = getTile(board, dest);
   if (destTile?.type === 'oil_slick') {
     const slideEvents = slideOnOilSlick(robot, direction, robots, board, registerIndex);
     events.push(...slideEvents);
@@ -192,6 +190,78 @@ function moveOneStep(robot, direction, robots, board, registerIndex) {
     }
   }
 
+  return { events, repulsed: false };
+}
+
+/**
+ * Check if a repulsor side feature blocks movement from `pos` in `direction`.
+ * Checks both exit side of source tile and entry side of destination tile.
+ */
+function isRepulsorBlocking(board, pos, direction) {
+  // Check source tile: repulsor on exit side
+  const srcTile = getTile(board, pos);
+  if (srcTile?.sideFeatures) {
+    for (const feature of srcTile.sideFeatures) {
+      if (feature.type === 'repulsor' && feature.side === direction) return true;
+    }
+  }
+  // Check destination tile: repulsor on entry side (opposite of direction)
+  const delta = directionDelta(direction);
+  const dest = { x: pos.x + delta.x, y: pos.y + delta.y };
+  if (!isInBounds(board, dest)) return false;
+  const destTile = getTile(board, dest);
+  if (destTile?.sideFeatures) {
+    const entrySide = oppositeDirection(direction);
+    for (const feature of destTile.sideFeatures) {
+      if (feature.type === 'repulsor' && feature.side === entrySide) return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Push a robot N steps in a direction, with chain-push, pit, and off-board support.
+ * Used by repulsor push-back.
+ */
+function pushBackRobot(robot, direction, steps, robots, board, registerIndex) {
+  const events = [];
+  for (let i = 0; i < steps; i++) {
+    if (!isAlive(robot)) break;
+
+    if (isWallBlocking(board, robot.position, direction)) break;
+
+    const delta = directionDelta(direction);
+    const dest = { x: robot.position.x + delta.x, y: robot.position.y + delta.y };
+
+    // Off board → death
+    if (!isInBounds(board, dest)) {
+      const from = { ...robot.position };
+      events.push({ type: 'fall', robotId: robot.id, from, details: 'off board' });
+      killRobot(robot);
+      break;
+    }
+
+    // Chain push other robots
+    const blocking = findRobotAt(robots, dest, robot.id);
+    if (blocking && !robot.virtual && !blocking.virtual) {
+      const pushEvents = pushRobotInDirection(blocking, direction, robots, board, registerIndex);
+      if (pushEvents.length === 0 || posEqual(blocking.position, dest)) {
+        break; // blocked
+      }
+      events.push(...pushEvents);
+    }
+
+    const from = { ...robot.position };
+    robot.position = dest;
+    events.push({ type: 'move', robotId: robot.id, from, to: { ...dest }, details: 'repulsor push-back' });
+
+    // Check pit
+    if (isPit(board, dest, registerIndex)) {
+      events.push({ type: 'fall', robotId: robot.id, from: { ...dest }, details: 'pit' });
+      killRobot(robot);
+      break;
+    }
+  }
   return events;
 }
 
@@ -745,26 +815,26 @@ function fireLaser(startX, startY, direction, strength, robots, board, source, e
   return events;
 }
 
-/** Process checkpoints — increment robot.checkpoint when landing on next sequential one.
- *  When excludeFinal is true, the highest-numbered checkpoint is skipped
+/** Process flags — increment robot.flag when landing on next sequential one.
+ *  When excludeFinal is true, the highest-numbered flag is skipped
  *  (it should only be credited after all board elements have executed). */
-export function processCheckpoints(robots, checkpoints, excludeFinal = false) {
+export function processFlags(robots, flags, excludeFinal = false) {
   const events = [];
-  const maxCp = checkpoints.length > 0 ? Math.max(...checkpoints.map((c) => c.number)) : 0;
+  const maxFlag = flags.length > 0 ? Math.max(...flags.map((c) => c.number)) : 0;
 
   for (const robot of robots) {
     if (!isAlive(robot)) continue;
-    const nextCheckpoint = robot.checkpoint + 1;
-    if (excludeFinal && nextCheckpoint === maxCp) continue;
-    const cp = checkpoints.find((c) => c.number === nextCheckpoint);
-    if (cp && posEqual(robot.position, cp.position)) {
-      robot.checkpoint = nextCheckpoint;
-      robot.archivePosition = { ...cp.position };
+    const nextFlag = robot.flag + 1;
+    if (excludeFinal && nextFlag === maxFlag) continue;
+    const flag = flags.find((c) => c.number === nextFlag);
+    if (flag && posEqual(robot.position, flag.position)) {
+      robot.flag = nextFlag;
+      robot.archivePosition = { ...flag.position };
       events.push({
-        type: 'checkpoint',
+        type: 'flag',
         robotId: robot.id,
-        to: cp.position,
-        details: `checkpoint ${nextCheckpoint}`,
+        to: flag.position,
+        details: `flag ${nextFlag}`,
       });
     }
   }
@@ -772,8 +842,40 @@ export function processCheckpoints(robots, checkpoints, excludeFinal = false) {
   return events;
 }
 
-/** Process repair sites — restore 1 health */
-export function processRepair(robots, board) {
+/** Process repair sites — update archive position (called per register) */
+export function processRepairArchive(robots, board) {
+  const events = [];
+
+  for (const robot of robots) {
+    if (!isAlive(robot)) continue;
+    const tile = getTile(board, robot.position);
+    if (tile?.type === 'repair') {
+      robot.archivePosition = { ...robot.position };
+      events.push({ type: 'repair_archive', robotId: robot.id, to: robot.position });
+    }
+  }
+
+  return events;
+}
+
+/** Process flag repair — heal 1 HP for robots on flag positions (called end-of-turn only) */
+export function processFlagRepair(robots, flags) {
+  const events = [];
+
+  for (const robot of robots) {
+    if (!isAlive(robot)) continue;
+    const onFlag = flags.some((f) => posEqual(robot.position, f.position));
+    if (onFlag) {
+      robot.health = Math.min(robot.health + 1, GAME.STARTING_HEALTH);
+      events.push({ type: 'flag_repair', robotId: robot.id, to: { ...robot.position } });
+    }
+  }
+
+  return events;
+}
+
+/** Process repair sites — heal 1 HP (called end-of-turn only) */
+export function processRepairHeal(robots, board) {
   const events = [];
 
   for (const robot of robots) {
@@ -781,7 +883,6 @@ export function processRepair(robots, board) {
     const tile = getTile(board, robot.position);
     if (tile?.type === 'repair') {
       robot.health = Math.min(robot.health + 1, GAME.STARTING_HEALTH);
-      robot.archivePosition = { ...robot.position };
       events.push({ type: 'repair', robotId: robot.id, to: robot.position });
     }
   }
@@ -869,7 +970,30 @@ export function processChopShop(robots, board) {
   return events;
 }
 
-/** Handle robot death: respawn at archive position (last checkpoint or repair site) */
+/**
+ * Process radioactive waste tiles — robots on radioactive waste can draw an option card.
+ * Returns events indicating which robots should draw. Actual drawing is handled by the caller.
+ */
+export function processRadioactiveWasteOptionDraw(robots, board) {
+  const events = [];
+
+  for (const robot of robots) {
+    if (!isAlive(robot)) continue;
+    const tile = getTile(board, robot.position);
+    if (tile?.type !== 'radioactive_waste') continue;
+
+    events.push({
+      type: 'option_draw',
+      robotId: robot.id,
+      to: { ...robot.position },
+      details: 'radioactive waste option card',
+    });
+  }
+
+  return events;
+}
+
+/** Handle robot death: respawn at archive position (last flag or repair site) */
 export function handleRobotDeath(robot) {
   if (robot.lives <= 0) return [];
   robot.position = { ...robot.archivePosition };
@@ -887,9 +1011,9 @@ export function handleRobotDeath(robot) {
  * 1. Robots move (card execution by priority)
  * 2. Board elements: express conveyors → all conveyors → pushers → gears → crushers
  * 3. Lasers: board lasers → robot lasers → flamers
- * 4. Checkpoints + repair
+ * 4. Flags + repair
  */
-export function executeRegister(registerIndex, playerCards, robots, board, checkpoints) {
+export function executeRegister(registerIndex, playerCards, robots, board, flags) {
   const events = [];
 
   // 1. Sort cards by priority (highest first) and execute
@@ -926,10 +1050,11 @@ export function executeRegister(registerIndex, playerCards, robots, board, check
   events.push(...processRadiation(robots, board, registerIndex));
   events.push(...processRadioactiveWaste(robots, board));
 
-  // 4. Checkpoints + repair + chop shop
-  events.push(...processCheckpoints(robots, checkpoints, true));
-  events.push(...processRepair(robots, board));
+  // 4. Flags + repair archive + chop shop
+  events.push(...processFlags(robots, flags, true));
+  events.push(...processRepairArchive(robots, board));
   events.push(...processChopShop(robots, board));
+  events.push(...processRadioactiveWasteOptionDraw(robots, board));
 
   return events;
 }
@@ -951,7 +1076,7 @@ function snapshotRobots(robots) {
 }
 
 /** Execute a register broken into granular sub-steps with robot snapshots after each */
-export function executeRegisterSteps(registerIndex, playerCards, robots, board, checkpoints) {
+export function executeRegisterSteps(registerIndex, playerCards, robots, board, flags) {
   const steps = [];
 
   // 1. Sort cards by priority (highest first) and execute
@@ -1041,15 +1166,15 @@ export function executeRegisterSteps(registerIndex, playerCards, robots, board, 
     steps.push({ label: 'Radioactive Waste', events: wasteEvents, robotsAfter: snapshotRobots(robots) });
   }
 
-  // 4. Checkpoints + repair + chop shop
-  const cpEvents = processCheckpoints(robots, checkpoints, true);
-  if (cpEvents.length > 0) {
-    steps.push({ label: 'Checkpoints', events: cpEvents, robotsAfter: snapshotRobots(robots) });
+  // 4. Flags + repair + chop shop
+  const flagEvents = processFlags(robots, flags, true);
+  if (flagEvents.length > 0) {
+    steps.push({ label: 'Flags', events: flagEvents, robotsAfter: snapshotRobots(robots) });
   }
 
-  const repairEvents = processRepair(robots, board);
-  if (repairEvents.length > 0) {
-    steps.push({ label: 'Repair', events: repairEvents, robotsAfter: snapshotRobots(robots) });
+  const repairArchiveEvents = processRepairArchive(robots, board);
+  if (repairArchiveEvents.length > 0) {
+    steps.push({ label: 'Repair Archive', events: repairArchiveEvents, robotsAfter: snapshotRobots(robots) });
   }
 
   const chopShopEvents = processChopShop(robots, board);
@@ -1057,13 +1182,18 @@ export function executeRegisterSteps(registerIndex, playerCards, robots, board, 
     steps.push({ label: 'Chop Shop', events: chopShopEvents, robotsAfter: snapshotRobots(robots) });
   }
 
+  const wasteOptionEvents = processRadioactiveWasteOptionDraw(robots, board);
+  if (wasteOptionEvents.length > 0) {
+    steps.push({ label: 'Radioactive Waste Options', events: wasteOptionEvents, robotsAfter: snapshotRobots(robots) });
+  }
+
   return steps;
 }
 
-/** Check if any robot has reached all checkpoints */
-export function checkWinCondition(robots, totalCheckpoints) {
+/** Check if any robot has reached all flags */
+export function checkWinCondition(robots, totalFlags) {
   for (const robot of robots) {
-    if (robot.checkpoint >= totalCheckpoints) {
+    if (robot.flag >= totalFlags) {
       return robot.playerId;
     }
   }

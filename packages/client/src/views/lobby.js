@@ -9,9 +9,9 @@ import { navigateTo } from '../lib/router.js';
 let mapConfigOpen = false;
 let availableBoards = [];
 let boardEntries = []; // { boardId, boardName, x, y, rotation }
-let checkpoints = [];  // { x, y, number }
+let flags = [];  // { x, y, number }
 let spawnPoints = [];   // { x, y, number }
-let placementMode = 'checkpoints'; // 'checkpoints' | 'spawns'
+let placementMode = 'flags'; // 'flags' | 'spawns'
 let compositeBoardCache = null;
 let boardTilesCache = new Map();
 
@@ -60,7 +60,7 @@ export function render(container, params) {
       y: b.y,
       rotation: b.rotation || 0,
     }));
-    checkpoints = mc.checkpoints || [];
+    flags = mc.flags || [];
     spawnPoints = mc.spawnPoints || [];
   }
 
@@ -109,7 +109,7 @@ export function render(container, params) {
 
     const mapConfig = {
       boards: boardEntries.map((e) => ({ boardId: e.boardId, x: e.x, y: e.y, rotation: e.rotation })),
-      checkpoints,
+      flags,
       spawnPoints,
     };
 
@@ -126,7 +126,7 @@ export function render(container, params) {
         y: e.y,
         rotation: e.rotation,
       })),
-      checkpoints,
+      flags,
       spawnPoints,
     };
   }
@@ -157,8 +157,8 @@ export function render(container, params) {
       rotation: 0,
     }];
 
-    // Default checkpoints
-    checkpoints = [
+    // Default flags
+    flags = [
       { x: 5, y: 10, number: 1 },
       { x: 5, y: 5, number: 2 },
       { x: 5, y: 1, number: 3 },
@@ -236,7 +236,7 @@ export function render(container, params) {
         <!-- Map Configurator -->
         <div class="map-configurator">
           <div class="map-config-header" id="map-config-toggle">
-            <h3>Map Configuration ${mapSummary ? `(${mapSummary.boardCount} board${mapSummary.boardCount !== 1 ? 's' : ''}, ${mapSummary.checkpointCount} checkpoints)` : '(not configured)'}</h3>
+            <h3>Map Configuration ${mapSummary ? `(${mapSummary.boardCount} board${mapSummary.boardCount !== 1 ? 's' : ''}, ${mapSummary.flagCount} flags)` : '(not configured)'}</h3>
             <span class="toggle-icon ${mapConfigOpen ? 'open' : ''}">\u25BC</span>
           </div>
           ${mapConfigOpen ? `
@@ -253,7 +253,7 @@ export function render(container, params) {
               ` : `
                 ${mapSummary ? `
                   <div class="map-config-summary">
-                    ${mapSummary.boardCount} board(s), ${mapSummary.checkpointCount} checkpoint(s), ${mapSummary.spawnCount} spawn(s)
+                    ${mapSummary.boardCount} board(s), ${mapSummary.flagCount} flag(s), ${mapSummary.spawnCount} spawn(s)
                   </div>
                   ${renderCompositePreview(false)}
                 ` : '<div class="map-config-summary">Host has not configured the map yet. Default board will be used.</div>'}
@@ -374,23 +374,23 @@ export function render(container, params) {
       });
     });
 
-    // Composite grid click for checkpoint/spawn placement
+    // Composite grid click for flag/spawn placement
     if (isHost) {
       container.querySelectorAll('.composite-cell').forEach((cell) => {
         cell.addEventListener('click', () => {
           const x = parseInt(cell.dataset.x);
           const y = parseInt(cell.dataset.y);
 
-          if (placementMode === 'checkpoints') {
-            // Toggle checkpoint at this position
-            const existing = checkpoints.findIndex((cp) => cp.x === x && cp.y === y);
+          if (placementMode === 'flags') {
+            // Toggle flag at this position
+            const existing = flags.findIndex((f) => f.x === x && f.y === y);
             if (existing >= 0) {
-              checkpoints.splice(existing, 1);
+              flags.splice(existing, 1);
               // Renumber
-              checkpoints.sort((a, b) => a.number - b.number);
-              checkpoints.forEach((cp, i) => cp.number = i + 1);
-            } else if (checkpoints.length < BOARD.MAX_CHECKPOINTS) {
-              checkpoints.push({ x, y, number: checkpoints.length + 1 });
+              flags.sort((a, b) => a.number - b.number);
+              flags.forEach((f, i) => f.number = i + 1);
+            } else if (flags.length < BOARD.MAX_FLAGS) {
+              flags.push({ x, y, number: flags.length + 1 });
             }
           } else {
             // Toggle spawn point
@@ -453,8 +453,8 @@ export function render(container, params) {
         <h4>Board Preview</h4>
         ${isHost ? `
           <div class="placement-tabs">
-            <button class="placement-tab ${placementMode === 'checkpoints' ? 'active' : ''}" data-mode="checkpoints">
-              Place Checkpoints (${checkpoints.length})
+            <button class="placement-tab ${placementMode === 'flags' ? 'active' : ''}" data-mode="flags">
+              Place Flags (${flags.length})
             </button>
             <button class="placement-tab ${placementMode === 'spawns' ? 'active' : ''}" data-mode="spawns">
               Place Spawns (${spawnPoints.length})
@@ -463,10 +463,10 @@ export function render(container, params) {
         ` : ''}
         <div class="composite-grid" style="grid-template-columns: repeat(${board.width}, 20px);">
           ${board.tiles.map((row, y) => row.map((tile, x) => {
-            const cp = checkpoints.find((c) => c.x === x && c.y === y);
+            const fl = flags.find((f) => f.x === x && f.y === y);
             const sp = spawnPoints.find((s) => s.x === x && s.y === y);
             return `<div class="composite-cell" data-type="${tile.type}" data-x="${x}" data-y="${y}">
-              ${cp ? `<span class="checkpoint-marker">${cp.number}</span>` : ''}
+              ${fl ? `<span class="flag-marker">${fl.number}</span>` : ''}
               ${sp ? `<span class="spawn-marker">${sp.number}</span>` : ''}
             </div>`;
           }).join('')).join('')}
@@ -482,7 +482,7 @@ export function unmount() {
   lobby.cleanupSocketListeners();
   mapConfigOpen = false;
   boardEntries = [];
-  checkpoints = [];
+  flags = [];
   spawnPoints = [];
   compositeBoardCache = null;
   // Keep availableBoards and boardTilesCache as they can be reused

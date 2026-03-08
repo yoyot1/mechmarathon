@@ -198,7 +198,7 @@ export class AnimationQueue {
         };
       }
 
-      case 'checkpoint':
+      case 'flag':
       case 'repair':
         // No visual tween needed
         return null;

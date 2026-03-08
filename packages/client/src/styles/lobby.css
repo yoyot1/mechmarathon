@@ -354,7 +354,7 @@
 .composite-cell[data-type="ledge"]             { background: #4a4a2a; }
 .composite-cell[data-type="ramp"]              { background: #3a4a3a; }
 
-.composite-cell .checkpoint-marker {
+.composite-cell .flag-marker {
   position: absolute;
   inset: 0;
   display: flex;

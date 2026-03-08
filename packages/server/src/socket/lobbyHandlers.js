@@ -181,9 +181,9 @@ export function registerLobbyHandlers(io, socket) {
       return;
     }
 
-    // Validate checkpoints and spawn points
-    if (mapConfig.checkpoints && !Array.isArray(mapConfig.checkpoints)) {
-      ack?.({ error: 'Invalid checkpoints format' });
+    // Validate flags and spawn points
+    if (mapConfig.flags && !Array.isArray(mapConfig.flags)) {
+      ack?.({ error: 'Invalid flags format' });
       return;
     }
     if (mapConfig.spawnPoints && !Array.isArray(mapConfig.spawnPoints)) {

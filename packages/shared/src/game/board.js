@@ -65,8 +65,8 @@ export const DEFAULT_BOARD = (() => {
   };
 })();
 
-/** Default 3 checkpoints for the default board */
-export function getDefaultCheckpoints() {
+/** Default 3 flags for the default board */
+export function getDefaultFlags() {
   return [
     { position: { x: 5, y: 10 }, number: 1 },  // south-center — robots start here
     { position: { x: 5, y: 5 }, number: 2 },    // center
@@ -157,9 +157,9 @@ export function rotateBoard(board, rotation) {
 
 /**
  * Assemble a composite board from a map configuration and board data.
- * @param {object} mapConfig - { boards: [{boardId, x, y, rotation}], checkpoints: [{x,y,number}], spawnPoints: [{x,y,number}] }
+ * @param {object} mapConfig - { boards: [{boardId, x, y, rotation}], flags: [{x,y,number}], spawnPoints: [{x,y,number}] }
  * @param {Map|object} boardsById - Map or plain object of boardId → board data (with tiles)
- * @returns {{ board: {width, height, tiles}, checkpoints: Array, spawnPoints: Array }}
+ * @returns {{ board: {width, height, tiles}, flags: Array, spawnPoints: Array }}
  */
 export function assembleMap(mapConfig, boardsById) {
   const SIZE = 12;
@@ -213,10 +213,10 @@ export function assembleMap(mapConfig, boardsById) {
     }
   }
 
-  // Convert checkpoints from map-level coordinates (already in composite space)
-  const checkpoints = (mapConfig.checkpoints || []).map((cp) => ({
-    position: { x: cp.x, y: cp.y },
-    number: cp.number,
+  // Convert flags from map-level coordinates (already in composite space)
+  const flags = (mapConfig.flags || []).map((f) => ({
+    position: { x: f.x, y: f.y },
+    number: f.number,
   }));
 
   const spawnPoints = (mapConfig.spawnPoints || []).map((sp) => ({
@@ -226,7 +226,7 @@ export function assembleMap(mapConfig, boardsById) {
 
   return {
     board: { width, height, tiles },
-    checkpoints,
+    flags,
     spawnPoints,
   };
 }

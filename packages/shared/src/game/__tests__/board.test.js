@@ -124,14 +124,14 @@ describe('assembleMap', () => {
     board.tiles[0][0] = { type: 'repair' };
     const mapConfig = {
       boards: [{ boardId: 'b1', x: 0, y: 0, rotation: 0 }],
-      checkpoints: [{ x: 5, y: 5, number: 1 }],
+      flags: [{ x: 5, y: 5, number: 1 }],
       spawnPoints: [{ x: 0, y: 11, number: 1 }],
     };
     const result = assembleMap(mapConfig, { b1: board });
     expect(result.board.width).toBe(12);
     expect(result.board.height).toBe(12);
     expect(result.board.tiles[0][0].type).toBe('repair');
-    expect(result.checkpoints).toEqual([{ position: { x: 5, y: 5 }, number: 1 }]);
+    expect(result.flags).toEqual([{ position: { x: 5, y: 5 }, number: 1 }]);
     expect(result.spawnPoints).toEqual([{ position: { x: 0, y: 11 }, number: 1 }]);
   });
 
@@ -145,7 +145,7 @@ describe('assembleMap', () => {
         { boardId: 'b1', x: 0, y: 0, rotation: 0 },
         { boardId: 'b2', x: 1, y: 0, rotation: 0 },
       ],
-      checkpoints: [],
+      flags: [],
       spawnPoints: [],
     };
     const result = assembleMap(mapConfig, { b1: board1, b2: board2 });
@@ -164,7 +164,7 @@ describe('assembleMap', () => {
         { boardId: 'b1', x: 0, y: 0, rotation: 0 },
         { boardId: 'b2', x: 0, y: 1, rotation: 0 },
       ],
-      checkpoints: [],
+      flags: [],
       spawnPoints: [],
     };
     const result = assembleMap(mapConfig, { b1: board1, b2: board2 });
@@ -181,7 +181,7 @@ describe('assembleMap', () => {
         { boardId: 'b1', x: 0, y: 0, rotation: 0 },
         { boardId: 'b2', x: 2, y: 0, rotation: 0 }, // gap at x=1
       ],
-      checkpoints: [],
+      flags: [],
       spawnPoints: [],
     };
     const result = assembleMap(mapConfig, { b1: board1, b2: board2 });
@@ -196,7 +196,7 @@ describe('assembleMap', () => {
     board.tiles[0][0] = { type: 'conveyor', direction: 'north' };
     const mapConfig = {
       boards: [{ boardId: 'b1', x: 0, y: 0, rotation: 90 }],
-      checkpoints: [],
+      flags: [],
       spawnPoints: [],
     };
     const result = assembleMap(mapConfig, { b1: board });
@@ -208,7 +208,7 @@ describe('assembleMap', () => {
   it('skips unknown board IDs', () => {
     const mapConfig = {
       boards: [{ boardId: 'nonexistent', x: 0, y: 0, rotation: 0 }],
-      checkpoints: [],
+      flags: [],
       spawnPoints: [],
     };
     const result = assembleMap(mapConfig, {});
@@ -217,13 +217,13 @@ describe('assembleMap', () => {
     expect(result.board.tiles[0][0].type).toBe('pit');
   });
 
-  it('handles empty checkpoints and spawnPoints', () => {
+  it('handles empty flags and spawnPoints', () => {
     const board = createEmptyBoard();
     const mapConfig = {
       boards: [{ boardId: 'b1', x: 0, y: 0, rotation: 0 }],
     };
     const result = assembleMap(mapConfig, { b1: board });
-    expect(result.checkpoints).toEqual([]);
+    expect(result.flags).toEqual([]);
     expect(result.spawnPoints).toEqual([]);
   });
 
@@ -233,7 +233,7 @@ describe('assembleMap', () => {
     const boardsMap = new Map([['b1', board]]);
     const mapConfig = {
       boards: [{ boardId: 'b1', x: 0, y: 0, rotation: 0 }],
-      checkpoints: [],
+      flags: [],
       spawnPoints: [],
     };
     const result = assembleMap(mapConfig, boardsMap);

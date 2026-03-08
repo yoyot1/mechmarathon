@@ -34,7 +34,7 @@ export const TILE_COLORS = {
   gear_ccw: 0x3a1a2a,
   repair: 0x1a3a3a,
   wall: 0x4a4a4a,
-  checkpoint: 0x3a3a1a,
+  flag: 0x3a3a1a,
   spawn: 0x2a2a3e,
   oil_slick: 0x1a1a1a,
   water: 0x1a2a4a,

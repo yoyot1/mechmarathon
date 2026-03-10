@@ -5,6 +5,7 @@ import { navigateTo } from '../lib/router.js';
 import * as history from '../lib/editor/history.js';
 import * as shortcuts from '../lib/editor/shortcuts.js';
 import * as editorCanvas from '../lib/editor/editorCanvas.js';
+import * as smartDraw from '../lib/editor/smartDraw.js';
 
 const TYPE_LABELS = {
   floor: 'Floor', conveyor: 'Conveyor', express_conveyor: 'Express', gear_cw: 'Gear CW',
@@ -52,6 +53,7 @@ let showShortcutsHelp = false;
 let canvasInitialized = false;
 
 const OPPOSITE_DIR = { north: 'south', south: 'north', east: 'west', west: 'east' };
+const SMART_DRAW_TOOLS = new Set(['conveyor', 'express_conveyor']);
 
 /** Set exit direction, swapping with entry if they collide. */
 function setExitDirection(newDir) {
@@ -98,8 +100,48 @@ function performRedo() {
   }
 }
 
+function paintGroundTile(x, y) {
+  const newTile = { type: selectedTool };
+  if (['conveyor', 'express_conveyor', 'current', 'ramp'].includes(selectedTool)) {
+    newTile.direction = selectedDirection;
+    if (['conveyor', 'express_conveyor'].includes(selectedTool) && selectedEntry.length > 0) {
+      newTile.entry = [...selectedEntry];
+    }
+  }
+  if (selectedTool === 'trap_pit' && selectedPhases.length > 0) {
+    newTile.phases = [...selectedPhases];
+  }
+  if (selectedTool === 'portal') {
+    newTile.group = selectedGroup;
+  }
+  if (selectedElevation > 0) {
+    newTile.elevation = selectedElevation;
+  }
+  // Preserve existing walls, side features, and overlays
+  const existing = tiles[y][x];
+  if (existing.walls?.length > 0) newTile.walls = existing.walls;
+  if (existing.sideFeatures?.length > 0) newTile.sideFeatures = existing.sideFeatures;
+  if (existing.overlays?.length > 0) newTile.overlays = existing.overlays;
+  if (existing.oneWayWalls?.length > 0) newTile.oneWayWalls = existing.oneWayWalls;
+  tiles[y][x] = newTile;
+  editorCanvas.rebuildBoard(tiles);
+}
+
 // Document-level mouseup handler (stored for cleanup)
-function onDocumentMouseUp() { isDragging = false; lastDragCell = null; }
+function onDocumentMouseUp() {
+  if (smartDraw.isActive()) {
+    const result = smartDraw.finish(tiles, selectedDirection);
+    if (result?.singleClick) {
+      // Fall back to normal single-click painting
+      paintGroundTile(result.pos.x, result.pos.y);
+    } else if (result?.applied) {
+      editorCanvas.rebuildBoard(tiles);
+    }
+    return;
+  }
+  isDragging = false;
+  lastDragCell = null;
+}
 
 export function render(container, params) {
   boardId = params?.id || null;
@@ -682,6 +724,15 @@ export function render(container, params) {
     if (e.button !== 0) return; // left click only
     const pos = editorCanvas.getGridPosition(e);
     if (!pos) return;
+
+    // Smart draw for conveyor tools in ground mode
+    const isGroundMode = !wallMode && !oneWayWallMode && !selectedSideFeature && !selectedOverlay;
+    if (isGroundMode && SMART_DRAW_TOOLS.has(selectedTool)) {
+      history.push(tiles);
+      smartDraw.start(pos.gridX, pos.gridY, selectedTool, tiles);
+      return;
+    }
+
     isDragging = true;
     lastDragCell = `${pos.gridX},${pos.gridY}`;
     history.push(tiles);
@@ -695,6 +746,16 @@ export function render(container, params) {
     } else {
       editorCanvas.setHoverCell(null, null);
     }
+
+    // Smart draw path extension
+    if (smartDraw.isActive() && pos) {
+      const result = smartDraw.extend(pos.gridX, pos.gridY, tiles, BOARD.SIZE);
+      if (result.applied) {
+        editorCanvas.rebuildBoard(tiles);
+      }
+      return;
+    }
+
     if (!isDragging || !pos) return;
     const cellKey = `${pos.gridX},${pos.gridY}`;
     if (cellKey === lastDragCell) return;
@@ -817,31 +878,7 @@ export function render(container, params) {
       return;
     }
 
-    // Paint ground tile
-    const newTile = { type: selectedTool };
-    if (['conveyor', 'express_conveyor', 'current', 'ramp'].includes(selectedTool)) {
-      newTile.direction = selectedDirection;
-      if (['conveyor', 'express_conveyor'].includes(selectedTool) && selectedEntry.length > 0) {
-        newTile.entry = [...selectedEntry];
-      }
-    }
-    if (selectedTool === 'trap_pit' && selectedPhases.length > 0) {
-      newTile.phases = [...selectedPhases];
-    }
-    if (selectedTool === 'portal') {
-      newTile.group = selectedGroup;
-    }
-    if (selectedElevation > 0) {
-      newTile.elevation = selectedElevation;
-    }
-    // Preserve existing walls, side features, and overlays
-    const existing = tiles[y][x];
-    if (existing.walls?.length > 0) newTile.walls = existing.walls;
-    if (existing.sideFeatures?.length > 0) newTile.sideFeatures = existing.sideFeatures;
-    if (existing.overlays?.length > 0) newTile.overlays = existing.overlays;
-    if (existing.oneWayWalls?.length > 0) newTile.oneWayWalls = existing.oneWayWalls;
-    tiles[y][x] = newTile;
-    editorCanvas.rebuildBoard(tiles);
+    paintGroundTile(x, y);
   }
 
   async function handleSave() {
@@ -893,6 +930,14 @@ export function render(container, params) {
   shortcuts.register('ctrl+z', performUndo, 'Undo', 'Editing');
   shortcuts.register('ctrl+shift+z', performRedo, 'Redo', 'Editing');
   shortcuts.register('Escape', () => {
+    if (smartDraw.isActive()) {
+      smartDraw.cancel();
+      // Restore from undo stack (undo the in-progress drag)
+      const restored = history.undo(tiles);
+      if (restored) tiles = restored;
+      editorCanvas.rebuildBoard(tiles);
+      return;
+    }
     selectedTool = 'floor';
     selectedSideFeature = null;
     selectedOverlay = null;
@@ -900,7 +945,7 @@ export function render(container, params) {
     oneWayWallMode = false;
     selectedEntry = [];
     update();
-  }, 'Deselect tool', 'Editing');
+  }, 'Deselect tool / cancel drag', 'Editing');
   shortcuts.register('w', () => {
     wallMode = !wallMode;
     oneWayWallMode = false;
@@ -947,6 +992,7 @@ export function render(container, params) {
 }
 
 export function unmount() {
+  smartDraw.cancel();
   editorCanvas.destroyEditorCanvas();
   document.removeEventListener('mouseup', onDocumentMouseUp);
   boardId = null;

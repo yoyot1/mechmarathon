@@ -52,6 +52,20 @@ let lastExpandedKey = null;
 let showShortcutsHelp = false;
 let canvasInitialized = false;
 
+const OPPOSITE_DIR = { north: 'south', south: 'north', east: 'west', west: 'east' };
+
+/** Set exit direction, swapping with entry if they collide. */
+function setExitDirection(newDir) {
+  const entryIdx = selectedEntry.indexOf(newDir);
+  if (entryIdx >= 0) {
+    selectedEntry.splice(entryIdx, 1);
+    if (!selectedEntry.includes(selectedDirection)) {
+      selectedEntry.push(selectedDirection);
+    }
+  }
+  selectedDirection = newDir;
+}
+
 // Persistent DOM wrapper references (survive update() calls)
 let headerWrapper = null;
 let toolbarWrapper = null;
@@ -542,7 +556,7 @@ export function render(container, params) {
     // Direction picker
     toolbarWrapper.querySelectorAll('.direction-picker button').forEach((btn) => {
       btn.addEventListener('click', () => {
-        selectedDirection = btn.dataset.dir;
+        setExitDirection(btn.dataset.dir);
         update();
       });
     });
@@ -554,6 +568,13 @@ export function render(container, params) {
         const idx = selectedEntry.indexOf(dir);
         if (idx >= 0) {
           selectedEntry.splice(idx, 1);
+        } else if (dir === selectedDirection) {
+          // Swap: flip exit to opposite, add this dir as entry
+          selectedDirection = OPPOSITE_DIR[dir];
+          // Remove new exit from entries if present
+          const newExitIdx = selectedEntry.indexOf(OPPOSITE_DIR[dir]);
+          if (newExitIdx >= 0) selectedEntry.splice(newExitIdx, 1);
+          selectedEntry.push(dir);
         } else {
           selectedEntry.push(dir);
         }
@@ -907,10 +928,10 @@ export function render(container, params) {
   }, 'Eraser', 'Tools');
 
   // Arrow keys for direction picker
-  shortcuts.register('ArrowUp', () => { selectedDirection = 'north'; update(); }, 'Direction: North', 'Direction');
-  shortcuts.register('ArrowDown', () => { selectedDirection = 'south'; update(); }, 'Direction: South', 'Direction');
-  shortcuts.register('ArrowRight', () => { selectedDirection = 'east'; update(); }, 'Direction: East', 'Direction');
-  shortcuts.register('ArrowLeft', () => { selectedDirection = 'west'; update(); }, 'Direction: West', 'Direction');
+  shortcuts.register('ArrowUp', () => { setExitDirection('north'); update(); }, 'Direction: North', 'Direction');
+  shortcuts.register('ArrowDown', () => { setExitDirection('south'); update(); }, 'Direction: South', 'Direction');
+  shortcuts.register('ArrowRight', () => { setExitDirection('east'); update(); }, 'Direction: East', 'Direction');
+  shortcuts.register('ArrowLeft', () => { setExitDirection('west'); update(); }, 'Direction: West', 'Direction');
 
   // Number keys for quick tile selection
   const tileKeys = BOARD.TILE_TYPES.slice(0, 9);

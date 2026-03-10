@@ -33,16 +33,23 @@ const DIR_VEC = { north: { x: 0, y: -1 }, south: { x: 0, y: 1 }, east: { x: 1, y
 // --- Tile classification ---
 
 function classifyConveyor(tile) {
-  const entries = getCurveEntries(tile);
-  if (entries.length === 0) return 'straight';
-  if (entries.length === 1) return 'curve';
-  return 'tmerge';
+  const curveEntries = getCurveEntries(tile);
+  const straight = hasStraightEntry(tile);
+  if (curveEntries.length === 0) return 'straight';
+  if (curveEntries.length === 1 && !straight) return 'curve';
+  return 'merge'; // any combination of curves (±straight)
 }
 
 /** Return entry directions that are 90° from exit (not opposite). */
 function getCurveEntries(tile) {
   if (!tile.entry || !Array.isArray(tile.entry) || !tile.direction) return [];
   return tile.entry.filter(e => e !== OPPOSITE[tile.direction]);
+}
+
+/** Check if opposite-to-exit direction is present (straight-through component). */
+function hasStraightEntry(tile) {
+  if (!tile.entry || !Array.isArray(tile.entry) || !tile.direction) return false;
+  return tile.entry.includes(OPPOSITE[tile.direction]);
 }
 
 // --- Curve path (bezier-based squircle) ---
@@ -156,26 +163,30 @@ function pPt(t, path) {
 
 // --- Bezier drawing helpers ---
 
-/** Draw a filled band along a bezier path between two normal offsets. */
-function drawBezierBand(g, px, py, path, offA, offB, segs, color) {
+/** Draw a filled band along a bezier path between two normal offsets.
+ *  tMin/tMax optionally restrict to a sub-range of the curve (default 0–1). */
+function drawBezierBand(g, px, py, path, offA, offB, segs, color, tMin, tMax) {
+  const t0 = tMin ?? 0, t1 = tMax ?? 1;
   const fwd = [];
   for (let i = 0; i <= segs; i++) {
-    const t = i / segs, pt = pPt(t, path), n = pNorm(t, path);
+    const t = t0 + (t1 - t0) * i / segs, pt = pPt(t, path), n = pNorm(t, path);
     fwd.push({ x: px + pt.x + n.x * offB, y: py + pt.y + n.y * offB });
   }
   g.moveTo(fwd[0].x, fwd[0].y);
   for (let i = 1; i < fwd.length; i++) g.lineTo(fwd[i].x, fwd[i].y);
   for (let i = segs; i >= 0; i--) {
-    const t = i / segs, pt = pPt(t, path), n = pNorm(t, path);
+    const t = t0 + (t1 - t0) * i / segs, pt = pPt(t, path), n = pNorm(t, path);
     g.lineTo(px + pt.x + n.x * offA, py + pt.y + n.y * offA);
   }
   g.closePath().fill(color);
 }
 
-/** Draw notch rectangles along a bezier path at a given normal offset. */
-function drawBezierNotches(g, px, py, path, offset, notchLen, notchW, count, color) {
+/** Draw notch rectangles along a bezier path at a given normal offset.
+ *  tMin/tMax optionally restrict to a sub-range of the curve (default 0–1). */
+function drawBezierNotches(g, px, py, path, offset, notchLen, notchW, count, color, tMin, tMax) {
+  const t0 = tMin ?? 0, t1 = tMax ?? 1;
   for (let i = 0; i < count; i++) {
-    const t = (i + 0.5) / count;
+    const t = t0 + (t1 - t0) * (i + 0.5) / count;
     const pt = pPt(t, path), n = pNorm(t, path);
     const tan = bTan(t, path.p0, path.p1, path.p2, path.p3);
     const tl = Math.hypot(tan.x, tan.y) || 1;
@@ -360,6 +371,95 @@ function drawExpressCurvedArrows(g, px, py, tileSize, entry, exit, strokeColor, 
   });
 }
 
+// --- Merge drawing helpers ---
+
+/**
+ * Draw rails for a merge tile (multiple entries converging to one exit).
+ * Instead of drawing independent per-curve rails that overlap, we draw:
+ *   1. Shared exit-side outer rails (straight strips along exit edge)
+ *   2. Per-curve entry-side outer rails (curved portions only, stopping at center)
+ *   3. Per-curve inner rails near each corner
+ *   4. Straight-through rails from opposite edge (if present)
+ */
+function drawMergeRails(g, px, py, tileSize, exitDir, curveEntries, hasStraight, railColor, notchColor) {
+  const railW = Math.max(3, tileSize * 0.16);
+  const notchLen = Math.max(2, tileSize * 0.08);
+  const notchSpacing = Math.max(4, tileSize * 0.16);
+  const notchW = railW * 1.0;
+  const half = tileSize / 2;
+  const segs = 16;
+  const isVertical = exitDir === 'north' || exitDir === 'south';
+
+  // 1. Exit-side outer rails: full straight strips along exit edge
+  //    These cover the shared "trunk" where all paths converge
+  if (isVertical) {
+    const yStart = exitDir === 'north' ? py : py + half;
+    g.rect(px, yStart, railW, half).fill(railColor);
+    g.rect(px + tileSize - railW, yStart, railW, half).fill(railColor);
+    const notchX1 = px + (railW - notchW) / 2;
+    const notchX2 = px + tileSize - railW + (railW - notchW) / 2;
+    for (let y = notchSpacing / 2; y < half; y += notchSpacing) {
+      g.rect(notchX1, yStart + y - notchLen / 2, notchW, notchLen).fill(notchColor);
+      g.rect(notchX2, yStart + y - notchLen / 2, notchW, notchLen).fill(notchColor);
+    }
+  } else {
+    const xStart = exitDir === 'west' ? px : px + half;
+    g.rect(xStart, py, half, railW).fill(railColor);
+    g.rect(xStart, py + tileSize - railW, half, railW).fill(railColor);
+    const notchY1 = py + (railW - notchW) / 2;
+    const notchY2 = py + tileSize - railW + (railW - notchW) / 2;
+    for (let x = notchSpacing / 2; x < half; x += notchSpacing) {
+      g.rect(xStart + x - notchLen / 2, notchY1, notchLen, notchW).fill(notchColor);
+      g.rect(xStart + x - notchLen / 2, notchY2, notchLen, notchW).fill(notchColor);
+    }
+  }
+
+  // 2. Per-curve entry: entry-side outer rail + inner rail + notches
+  for (const entry of curveEntries) {
+    const path = getCurvePath(entry, exitDir, tileSize);
+
+    // Entry-side outer rail: draw from t=0 (entry edge) to t=0.5 (roughly center)
+    // This avoids the exit-side overlap — the straight exit rails cover that half
+    drawBezierBand(g, px, py, path, half - railW, half, segs, railColor, 0, 0.5);
+
+    // Outer rail notches on entry half
+    const outerOff = half - railW / 2;
+    const outerLen = approxLen(path, outerOff, segs) / 2;
+    const outerCount = Math.max(1, Math.round(outerLen / notchSpacing));
+    drawBezierNotches(g, px, py, path, outerOff, notchLen, notchW, outerCount, notchColor, 0, 0.5);
+
+    // Inner rail near corner
+    const innerPath = getInnerRailPath(entry, exitDir, tileSize, railW);
+    drawBezierBand(g, px, py, innerPath, -railW / 2, railW / 2, segs, railColor);
+    drawBezierNotches(g, px, py, innerPath, 0, notchLen, notchW, 1, notchColor);
+  }
+
+  // 3. Straight-through entry: rails from opposite edge to center
+  if (hasStraight) {
+    if (isVertical) {
+      const yStart = exitDir === 'north' ? py + half : py;
+      g.rect(px, yStart, railW, half).fill(railColor);
+      g.rect(px + tileSize - railW, yStart, railW, half).fill(railColor);
+      const notchX1 = px + (railW - notchW) / 2;
+      const notchX2 = px + tileSize - railW + (railW - notchW) / 2;
+      for (let y = notchSpacing / 2; y < half; y += notchSpacing) {
+        g.rect(notchX1, yStart + y - notchLen / 2, notchW, notchLen).fill(notchColor);
+        g.rect(notchX2, yStart + y - notchLen / 2, notchW, notchLen).fill(notchColor);
+      }
+    } else {
+      const xStart = exitDir === 'west' ? px + half : px;
+      g.rect(xStart, py, half, railW).fill(railColor);
+      g.rect(xStart, py + tileSize - railW, half, railW).fill(railColor);
+      const notchY1 = py + (railW - notchW) / 2;
+      const notchY2 = py + tileSize - railW + (railW - notchW) / 2;
+      for (let x = notchSpacing / 2; x < half; x += notchSpacing) {
+        g.rect(xStart + x - notchLen / 2, notchY1, notchLen, notchW).fill(notchColor);
+        g.rect(xStart + x - notchLen / 2, notchY2, notchLen, notchW).fill(notchColor);
+      }
+    }
+  }
+}
+
 // --- Renderers ---
 
 function simpleConveyor(container, tile, px, py, tileSize) {
@@ -381,11 +481,25 @@ function enhancedConveyor(container, tile, px, py, tileSize) {
       drawStrokedArrow(g, px + tileSize / 2, py + tileSize / 2,
         dir, tileSize * 0.6, CONVEYOR_STROKE, CONVEYOR_FILL);
     }
-  } else {
+  } else if (type === 'curve') {
     const entries = getCurveEntries(tile);
-    for (const entry of entries) {
-      drawCurvedRails(g, px, py, tileSize, entry, dir, CONVEYOR_RAIL, CONVEYOR_NOTCH);
+    drawCurvedRails(g, px, py, tileSize, entries[0], dir, CONVEYOR_RAIL, CONVEYOR_NOTCH);
+    drawCurvedArrow(g, px, py, tileSize, entries[0], dir, CONVEYOR_STROKE, CONVEYOR_FILL);
+  } else {
+    // merge: composite rails + per-entry arrows
+    const curveEntries = getCurveEntries(tile);
+    const straight = hasStraightEntry(tile);
+    drawMergeRails(g, px, py, tileSize, dir, curveEntries, straight, CONVEYOR_RAIL, CONVEYOR_NOTCH);
+    for (const entry of curveEntries) {
       drawCurvedArrow(g, px, py, tileSize, entry, dir, CONVEYOR_STROKE, CONVEYOR_FILL);
+    }
+    if (straight) {
+      // Offset the straight arrow slightly toward opposite edge to avoid overlapping curve arrows
+      const dv = DIR_VEC[OPPOSITE[dir]];
+      const offset = tileSize * 0.08;
+      drawStrokedArrow(g,
+        px + tileSize / 2 + dv.x * offset, py + tileSize / 2 + dv.y * offset,
+        dir, tileSize * 0.5, CONVEYOR_STROKE, CONVEYOR_FILL);
     }
   }
 
@@ -411,11 +525,24 @@ function enhancedExpress(container, tile, px, py, tileSize) {
       drawDoubleArrows(g, px + tileSize / 2, py + tileSize / 2,
         dir, tileSize * 0.6, EXPRESS_STROKE, EXPRESS_FILL);
     }
-  } else {
+  } else if (type === 'curve') {
     const entries = getCurveEntries(tile);
-    for (const entry of entries) {
-      drawCurvedRails(g, px, py, tileSize, entry, dir, EXPRESS_RAIL, EXPRESS_NOTCH);
+    drawCurvedRails(g, px, py, tileSize, entries[0], dir, EXPRESS_RAIL, EXPRESS_NOTCH);
+    drawExpressCurvedArrows(g, px, py, tileSize, entries[0], dir, EXPRESS_STROKE, EXPRESS_FILL);
+  } else {
+    // merge: composite rails + per-entry arrows
+    const curveEntries = getCurveEntries(tile);
+    const straight = hasStraightEntry(tile);
+    drawMergeRails(g, px, py, tileSize, dir, curveEntries, straight, EXPRESS_RAIL, EXPRESS_NOTCH);
+    for (const entry of curveEntries) {
       drawExpressCurvedArrows(g, px, py, tileSize, entry, dir, EXPRESS_STROKE, EXPRESS_FILL);
+    }
+    if (straight) {
+      const dv = DIR_VEC[OPPOSITE[dir]];
+      const offset = tileSize * 0.08;
+      drawDoubleArrows(g,
+        px + tileSize / 2 + dv.x * offset, py + tileSize / 2 + dv.y * offset,
+        dir, tileSize * 0.5, EXPRESS_STROKE, EXPRESS_FILL);
     }
   }
 

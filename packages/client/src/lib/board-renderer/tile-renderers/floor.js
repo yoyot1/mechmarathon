@@ -1,17 +1,11 @@
 /**
- * Floor tile renderer — simple and enhanced modes.
+ * Floor tile renderer.
  */
 import { Graphics } from 'pixi.js';
 import { registerRenderer } from './index.js';
 import { TILE_COLORS } from '../constants.js';
 
-function simple(container, tile, px, py, tileSize) {
-  const g = new Graphics();
-  g.rect(px, py, tileSize, tileSize).fill(TILE_COLORS.floor);
-  container.addChild(g);
-}
-
-function enhanced(container, tile, px, py, tileSize) {
+function renderFloor(container, tile, px, py, tileSize) {
   const g = new Graphics();
   // Base fill
   g.rect(px, py, tileSize, tileSize).fill(TILE_COLORS.floor);
@@ -27,4 +21,4 @@ function enhanced(container, tile, px, py, tileSize) {
   container.addChild(g);
 }
 
-registerRenderer('floor', { simple, enhanced });
+registerRenderer('floor', renderFloor);

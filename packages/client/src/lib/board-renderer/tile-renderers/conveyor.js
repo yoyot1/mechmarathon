@@ -9,11 +9,7 @@
  */
 import { Graphics } from 'pixi.js';
 import { registerRenderer } from './index.js';
-import { TILE_COLORS } from '../constants.js';
-
 // --- Colors ---
-const TILE_BG = 0x0a0a0a;
-
 const CONVEYOR_STROKE = 0xc8a832;
 const CONVEYOR_FILL = 0x1a3a1a;
 const CONVEYOR_RAIL = 0x555555;
@@ -462,15 +458,8 @@ function drawMergeRails(g, px, py, tileSize, exitDir, curveEntries, hasStraight,
 
 // --- Renderers ---
 
-function simpleConveyor(container, tile, px, py, tileSize) {
+function renderConveyor(container, tile, px, py, tileSize) {
   const g = new Graphics();
-  g.rect(px, py, tileSize, tileSize).fill(TILE_COLORS.conveyor);
-  container.addChild(g);
-}
-
-function enhancedConveyor(container, tile, px, py, tileSize) {
-  const g = new Graphics();
-  g.rect(px, py, tileSize, tileSize).fill(TILE_BG);
 
   const type = classifyConveyor(tile);
   const dir = tile.direction || 'north';
@@ -506,15 +495,8 @@ function enhancedConveyor(container, tile, px, py, tileSize) {
   container.addChild(g);
 }
 
-function simpleExpress(container, tile, px, py, tileSize) {
+function renderExpress(container, tile, px, py, tileSize) {
   const g = new Graphics();
-  g.rect(px, py, tileSize, tileSize).fill(TILE_COLORS.express_conveyor);
-  container.addChild(g);
-}
-
-function enhancedExpress(container, tile, px, py, tileSize) {
-  const g = new Graphics();
-  g.rect(px, py, tileSize, tileSize).fill(TILE_BG);
 
   const type = classifyConveyor(tile);
   const dir = tile.direction || 'north';
@@ -549,5 +531,5 @@ function enhancedExpress(container, tile, px, py, tileSize) {
   container.addChild(g);
 }
 
-registerRenderer('conveyor', { simple: simpleConveyor, enhanced: enhancedConveyor });
-registerRenderer('express_conveyor', { simple: simpleExpress, enhanced: enhancedExpress });
+registerRenderer('conveyor', renderConveyor);
+registerRenderer('express_conveyor', renderExpress);

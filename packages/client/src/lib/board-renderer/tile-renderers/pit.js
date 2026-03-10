@@ -1,18 +1,12 @@
 /**
- * Pit tile renderer — simple and enhanced modes.
+ * Pit tile renderer.
  */
 import { Graphics } from 'pixi.js';
 import { registerRenderer } from './index.js';
 import { drawHazardHatch } from './base.js';
 import { TILE_COLORS } from '../constants.js';
 
-function simple(container, tile, px, py, tileSize) {
-  const g = new Graphics();
-  g.rect(px, py, tileSize, tileSize).fill(TILE_COLORS.pit);
-  container.addChild(g);
-}
-
-function enhanced(container, tile, px, py, tileSize) {
+function renderPit(container, tile, px, py, tileSize) {
   const g = new Graphics();
 
   // Dark outer fill
@@ -33,5 +27,5 @@ function enhanced(container, tile, px, py, tileSize) {
   container.addChild(g);
 }
 
-registerRenderer('pit', { simple, enhanced });
-registerRenderer('trap_pit', { simple, enhanced });
+registerRenderer('pit', renderPit);
+registerRenderer('trap_pit', renderPit);

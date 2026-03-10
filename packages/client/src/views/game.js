@@ -14,7 +14,6 @@ import {
   rebuildBoard,
   isInitialized,
 } from './boardCanvas.js';
-import { setRenderMode, getRenderMode } from '../lib/board-renderer/index.js';
 
 let legendOpen = true;
 let initialTimerInterval = null;
@@ -109,7 +108,6 @@ function renderHeader() {
           `).join('')}
         </div>
         <button class="debug-toggle ${game.debugMode ? 'active' : ''}" id="debug-toggle" title="Step-through execution">Debug</button>
-        <button class="debug-toggle ${getRenderMode() === 'enhanced' ? 'active' : ''}" id="render-mode-toggle" title="Toggle enhanced graphics">GFX</button>
         ${game.debugMode && game.isExecuting ? `
           <button class="btn btn-step-back" id="debug-step-back">&laquo; Back</button>
           <button class="btn btn-step" id="debug-step">Step &raquo;</button>
@@ -370,15 +368,6 @@ function attachEventListeners() {
   // Debug toggle
   containerRef.querySelector('#debug-toggle')?.addEventListener('click', () => {
     game.toggleDebugMode(getGameId());
-  });
-
-  // Render mode toggle
-  containerRef.querySelector('#render-mode-toggle')?.addEventListener('click', () => {
-    const newMode = getRenderMode() === 'simple' ? 'enhanced' : 'simple';
-    setRenderMode(newMode);
-    rebuildBoard();
-    const btn = containerRef.querySelector('#render-mode-toggle');
-    if (btn) btn.classList.toggle('active', newMode === 'enhanced');
   });
 
   // Debug step

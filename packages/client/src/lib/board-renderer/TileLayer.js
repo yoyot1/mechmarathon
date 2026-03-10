@@ -25,7 +25,7 @@ import {
   ONEWAY_WALL_EXIT_COLOR,
   ELEVATION_COLOR,
 } from './constants.js';
-import { getRenderer, getRenderMode } from './tile-renderers/index.js';
+import { getRenderer } from './tile-renderers/index.js';
 
 // Import renderers to trigger registration
 import './tile-renderers/floor.js';
@@ -53,6 +53,9 @@ const PHASE_LABEL_STYLE = new TextStyle({
 
 const OPPOSITE = { north: 'south', south: 'north', east: 'west', west: 'east' };
 const DIR_DELTA = { north: { x: 0, y: -1 }, south: { x: 0, y: 1 }, east: { x: 1, y: 0 }, west: { x: -1, y: 0 } };
+
+// Tiles that ARE the base (no floor drawn underneath)
+const BASE_TILES = new Set(['floor', 'pit', 'trap_pit']);
 
 export class TileLayer {
   constructor() {
@@ -104,15 +107,33 @@ export class TileLayer {
   }
 
   _drawTile(tile, px, py) {
+    // Draw floor base underneath non-base tiles
+    if (!BASE_TILES.has(tile.type)) {
+      this._drawFloorBase(px, py);
+    }
+
     const renderer = getRenderer(tile.type);
     if (renderer) {
       renderer(this.container, tile, px, py, TILE_SIZE);
       return;
     }
-    // Fallback: solid color rect
+    // Fallback: semi-transparent tinted rect (floor shows through)
     const g = new Graphics();
-    g.rect(px, py, TILE_SIZE, TILE_SIZE).fill(TILE_COLORS[tile.type] ?? TILE_COLORS.floor);
+    const color = TILE_COLORS[tile.type] ?? TILE_COLORS.floor;
+    const alpha = BASE_TILES.has(tile.type) ? 1.0 : 0.6;
+    g.rect(px, py, TILE_SIZE, TILE_SIZE).fill({ color, alpha });
     this.container.addChild(g);
+  }
+
+  _drawFloorBase(px, py) {
+    const floorRenderer = getRenderer('floor');
+    if (floorRenderer) {
+      floorRenderer(this.container, { type: 'floor' }, px, py, TILE_SIZE);
+    } else {
+      const g = new Graphics();
+      g.rect(px, py, TILE_SIZE, TILE_SIZE).fill(TILE_COLORS.floor);
+      this.container.addChild(g);
+    }
   }
 
   _drawWalls(tile, px, py) {
@@ -172,9 +193,8 @@ export class TileLayer {
   }
 
   _drawSymbol(tile, px, py) {
-    // In enhanced mode, skip text symbols for tile types whose enhanced
-    // renderer already draws directional/decorative visuals
-    if (getRenderMode() === 'enhanced' && getRenderer(tile.type)) return;
+    // Skip text symbols for tile types with a registered renderer
+    if (getRenderer(tile.type)) return;
 
     let symbol;
 

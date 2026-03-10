@@ -5,7 +5,6 @@ import { navigateTo } from '../lib/router.js';
 import * as history from '../lib/editor/history.js';
 import * as shortcuts from '../lib/editor/shortcuts.js';
 import * as editorCanvas from '../lib/editor/editorCanvas.js';
-import { setRenderMode, getRenderMode } from '../lib/board-renderer/index.js';
 
 const TYPE_LABELS = {
   floor: 'Floor', conveyor: 'Conveyor', express_conveyor: 'Express', gear_cw: 'Gear CW',
@@ -333,7 +332,6 @@ export function render(container, params) {
       </div>
       <button class="tool-btn" id="eraser-btn">Eraser <kbd>E</kbd></button>
       <button class="tool-btn" id="clear-btn">Clear All</button>
-      <button class="tool-btn" id="gfx-toggle-btn">GFX: ${getRenderMode() === 'enhanced' ? 'Enhanced' : 'Simple'}</button>
       <button class="tool-btn" id="shortcuts-help-btn">${showShortcutsHelp ? 'Hide' : 'Show'} Shortcuts <kbd>?</kbd></button>
       ${showShortcutsHelp ? renderShortcutsHelp() : ''}
 
@@ -520,13 +518,6 @@ export function render(container, params) {
     // Undo/Redo
     toolbarWrapper.querySelector('#undo-btn')?.addEventListener('click', performUndo);
     toolbarWrapper.querySelector('#redo-btn')?.addEventListener('click', performRedo);
-
-    // GFX toggle
-    toolbarWrapper.querySelector('#gfx-toggle-btn')?.addEventListener('click', () => {
-      const newMode = getRenderMode() === 'enhanced' ? 'simple' : 'enhanced';
-      setRenderMode(newMode);
-      update();
-    });
 
     // Shortcuts help toggle
     toolbarWrapper.querySelector('#shortcuts-help-btn')?.addEventListener('click', () => {

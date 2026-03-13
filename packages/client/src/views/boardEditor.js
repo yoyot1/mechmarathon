@@ -31,7 +31,7 @@ let tiles = [];
 let boardName = '';
 let boardDescription = '';
 let boardId = null;
-let selectedTool = 'floor';
+let selectedTool = null;
 let selectedDirection = 'north';
 let selectedSideFeature = null;
 let selectedOverlay = null;
@@ -268,7 +268,8 @@ export function render(container, params) {
   function update() {
     const canSave = boardName.length >= BOARD.NAME_MIN_LENGTH && !saving;
     const hasContent = tiles.some((row) => row.some((t) => t.type !== 'floor' || t.sideFeatures?.length || t.overlays?.length));
-    const isGroundMode = !wallMode && !oneWayWallMode && !selectedSideFeature && !selectedOverlay;
+    const isSelectionMode = selectedTool === null && !wallMode && !oneWayWallMode && !selectedSideFeature && !selectedOverlay;
+    const isGroundMode = selectedTool !== null && !wallMode && !oneWayWallMode && !selectedSideFeature && !selectedOverlay;
     const isSideFeatureMode = !!selectedSideFeature && !wallMode && !oneWayWallMode;
     const isOverlayMode = !!selectedOverlay && !wallMode && !oneWayWallMode;
 
@@ -314,8 +315,12 @@ export function render(container, params) {
       ${error ? `<p class="error">${error}</p>` : ''}
     `;
 
+    // -- Canvas cursor --
+    canvasWrapper.style.cursor = isSelectionMode ? 'default' : 'crosshair';
+
     // -- Toolbar --
     toolbarWrapper.innerHTML = `
+      <button class="tool-btn select-tool-btn ${isSelectionMode ? 'active' : ''}" id="select-tool-btn">Select <kbd>V</kbd></button>
       <h4>Board Elements</h4>
       ${BOARD.TILE_TYPES.map((t) => {
         const isActive = selectedTool === t && isGroundMode;
@@ -496,6 +501,17 @@ export function render(container, params) {
   }
 
   function attachToolbarSidebarListeners() {
+    // Select tool (pointer mode)
+    toolbarWrapper.querySelector('#select-tool-btn')?.addEventListener('click', () => {
+      selectedTool = null;
+      selectedSideFeature = null;
+      selectedOverlay = null;
+      wallMode = false;
+      oneWayWallMode = false;
+      selectedEntry = [];
+      update();
+    });
+
     // Tool buttons (ground tiles)
     toolbarWrapper.querySelectorAll('.tool-btn[data-tool]').forEach((btn) => {
       btn.addEventListener('click', () => {
@@ -726,10 +742,17 @@ export function render(container, params) {
     if (!pos) return;
 
     // Smart draw for conveyor tools in ground mode
-    const isGroundMode = !wallMode && !oneWayWallMode && !selectedSideFeature && !selectedOverlay;
+    const isGroundMode = selectedTool !== null && !wallMode && !oneWayWallMode && !selectedSideFeature && !selectedOverlay;
     if (isGroundMode && SMART_DRAW_TOOLS.has(selectedTool)) {
       history.push(tiles);
       smartDraw.start(pos.gridX, pos.gridY, selectedTool, tiles);
+      return;
+    }
+
+    // Selection mode: select tile without modifying
+    if (selectedTool === null && !wallMode && !oneWayWallMode && !selectedSideFeature && !selectedOverlay) {
+      selectedCell = { x: pos.gridX, y: pos.gridY };
+      update();
       return;
     }
 
@@ -878,7 +901,12 @@ export function render(container, params) {
       return;
     }
 
-    paintGroundTile(x, y);
+    if (selectedTool === null) {
+      selectedCell = { x, y };
+      update();
+    } else {
+      paintGroundTile(x, y);
+    }
   }
 
   async function handleSave() {
@@ -938,7 +966,7 @@ export function render(container, params) {
       editorCanvas.rebuildBoard(tiles);
       return;
     }
-    selectedTool = 'floor';
+    selectedTool = null;
     selectedSideFeature = null;
     selectedOverlay = null;
     wallMode = false;
@@ -962,6 +990,15 @@ export function render(container, params) {
     selectedEntry = [];
     update();
   }, 'Eraser', 'Tools');
+  shortcuts.register('v', () => {
+    selectedTool = null;
+    selectedSideFeature = null;
+    selectedOverlay = null;
+    wallMode = false;
+    oneWayWallMode = false;
+    selectedEntry = [];
+    update();
+  }, 'Select (pointer)', 'Tools');
 
   // Arrow keys for direction picker
   shortcuts.register('ArrowUp', () => { setExitDirection('north'); update(); }, 'Direction: North', 'Direction');
@@ -1001,6 +1038,7 @@ export function unmount() {
   tiles = [];
   isDragging = false;
   lastDragCell = null;
+  selectedTool = null;
   selectedCell = null;
   selectedSideFeature = null;
   selectedOverlay = null;

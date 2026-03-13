@@ -44,6 +44,10 @@
   padding-right: 4px;
 }
 
+.select-tool-btn {
+  margin-bottom: 0.25rem;
+}
+
 .editor-toolbar h4 {
   margin: 0.5rem 0 0.25rem;
   font-size: 0.8rem;

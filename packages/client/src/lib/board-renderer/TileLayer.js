@@ -32,6 +32,9 @@ import './tile-renderers/floor.js';
 import './tile-renderers/pit.js';
 import './tile-renderers/conveyor.js';
 
+// Path-based renderers (SVG-derived) — overrides above if path data exists
+import './tile-renderers/path-tiles.js';
+
 const SYMBOL_STYLE = new TextStyle({
   fontSize: 16,
   fill: 0xffffff,
@@ -55,7 +58,7 @@ const OPPOSITE = { north: 'south', south: 'north', east: 'west', west: 'east' };
 const DIR_DELTA = { north: { x: 0, y: -1 }, south: { x: 0, y: 1 }, east: { x: 1, y: 0 }, west: { x: -1, y: 0 } };
 
 // Tiles that ARE the base (no floor drawn underneath)
-const BASE_TILES = new Set(['floor', 'pit', 'trap_pit']);
+const BASE_TILES = new Set(['floor', 'pit', 'trap_pit', 'drain', 'radioactive_drain']);
 
 export class TileLayer {
   constructor() {

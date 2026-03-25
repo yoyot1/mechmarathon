@@ -533,3 +533,6 @@ function renderExpress(container, tile, px, py, tileSize) {
 
 registerRenderer('conveyor', renderConveyor);
 registerRenderer('express_conveyor', renderExpress);
+
+// Export for use as fallback by the SVG-based conveyor-paths.js renderer
+export { renderConveyor, renderExpress };

@@ -3,6 +3,7 @@
   "private": true,
   "version": "0.1.0",
   "description": "A web-based real-time multiplayer game based on RoboRally",
+  "type": "module",
   "scripts": {
     "dev": "pnpm --parallel -r run dev",
     "dev:client": "pnpm --filter @mechmarathon/client dev",
@@ -10,10 +11,14 @@
     "build": "pnpm -r run build",
     "test": "pnpm -r run test",
     "lint": "pnpm -r run lint",
-    "clean": "pnpm -r run clean"
+    "clean": "pnpm -r run clean",
+    "extract-tiles": "node scripts/extract-svg-paths.js"
   },
   "engines": {
     "node": ">=20"
   },
-  "packageManager": "pnpm@9.15.4"
+  "packageManager": "pnpm@9.15.4",
+  "devDependencies": {
+    "fast-xml-parser": "^5.5.6"
+  }
 }

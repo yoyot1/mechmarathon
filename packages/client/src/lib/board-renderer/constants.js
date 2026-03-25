@@ -144,3 +144,21 @@ export const MAX_SCALE = 1.5;
 
 /** Padding around board in pixels */
 export const BOARD_PADDING = 16;
+
+/** Convert a 0xRRGGBB hex number to CSS color string */
+export function hexToCss(hex) {
+  return '#' + hex.toString(16).padStart(6, '0');
+}
+
+/** CSS string versions of frequently used colors */
+export const WALL_COLOR_CSS = hexToCss(WALL_COLOR);
+export const ONEWAY_WALL_ENTRY_COLOR_CSS = hexToCss(ONEWAY_WALL_ENTRY_COLOR);
+export const ONEWAY_WALL_EXIT_COLOR_CSS = hexToCss(ONEWAY_WALL_EXIT_COLOR);
+export const LASER_BEAM_COLOR_CSS = hexToCss(LASER_BEAM_COLOR);
+export const LASER_MOUNT_COLOR_CSS = hexToCss(LASER_MOUNT_COLOR);
+export const PUSHER_COLOR_CSS = hexToCss(PUSHER_COLOR);
+export const FLAMER_COLOR_CSS = hexToCss(FLAMER_COLOR);
+export const CRUSHER_COLOR_CSS = hexToCss(CRUSHER_COLOR);
+export const BOARD_BG_COLOR_CSS = hexToCss(BOARD_BG_COLOR);
+export const PHASE_DOT_COLOR_CSS = hexToCss(PHASE_DOT_COLOR);
+export const ELEVATION_COLOR_CSS = hexToCss(ELEVATION_COLOR);

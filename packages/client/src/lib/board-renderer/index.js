@@ -1,5 +1,5 @@
-export { TileLayer } from './TileLayer.js';
-export { RobotLayer } from './RobotLayer.js';
-export { AnimationQueue } from './AnimationQueue.js';
+export { DomTileLayer as TileLayer } from './DomTileLayer.js';
+export { DomRobotLayer as RobotLayer } from './DomRobotLayer.js';
+export { DomAnimationQueue as AnimationQueue } from './DomAnimationQueue.js';
 export * from './constants.js';
 export * from './utils.js';

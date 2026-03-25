@@ -124,7 +124,7 @@ function paintGroundTile(x, y) {
   if (existing.overlays?.length > 0) newTile.overlays = existing.overlays;
   if (existing.oneWayWalls?.length > 0) newTile.oneWayWalls = existing.oneWayWalls;
   tiles[y][x] = newTile;
-  editorCanvas.rebuildBoard(tiles);
+  editorCanvas.updateTile(x, y, tiles);
 }
 
 // Document-level mouseup handler (stored for cleanup)

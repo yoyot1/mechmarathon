@@ -1,24 +1,25 @@
-import { Ticker } from 'pixi.js';
+/**
+ * DOM-based animation queue — replaces the PixiJS AnimationQueue.
+ *
+ * Uses requestAnimationFrame for manual tweening (same approach as the
+ * PixiJS ticker-based version), maintaining identical animation logic.
+ */
 import { BASE_TWEEN_DURATION_MS } from './constants.js';
 import { boardToPixel, directionToRadians, lerp, lerpAngle, easeInOutCubic } from './utils.js';
 
-export class AnimationQueue {
-  constructor(robotLayer, ticker) {
+export class DomAnimationQueue {
+  constructor(robotLayer) {
     this.robotLayer = robotLayer;
-    this.ticker = ticker;
     this.speed = 1;
     this.cancelled = false;
     this.resolvePromise = null;
+    this._rafId = null;
   }
 
   setSpeed(speed) {
     this.speed = speed;
   }
 
-  /**
-   * Animate a sequence of execution events, then resolve.
-   * The caller should snap robots to final positions after this resolves.
-   */
   async animate(events, updatedRobots) {
     this.cancelled = false;
     const groups = this._buildTweenGroups(events);
@@ -28,13 +29,15 @@ export class AnimationQueue {
       await this._runGroup(group);
     }
 
-    // After animation, sync robots to their final server state
     this.robotLayer.syncRobots(updatedRobots);
   }
 
-  /** Cancel current animation and snap robots to final positions */
   cancelAndSnap(robots) {
     this.cancelled = true;
+    if (this._rafId) {
+      cancelAnimationFrame(this._rafId);
+      this._rafId = null;
+    }
     if (this.resolvePromise) {
       this.resolvePromise();
       this.resolvePromise = null;
@@ -85,7 +88,6 @@ export class AnimationQueue {
         if (!ev.from || !ev.to) return null;
         const from = boardToPixel(ev.from);
         const to = boardToPixel(ev.to);
-        // Set robot to start position before tweening
         this.robotLayer.setRobotPosition(ev.robotId, from.x, from.y);
         return {
           robotId: ev.robotId,
@@ -98,7 +100,6 @@ export class AnimationQueue {
       }
 
       case 'rotate': {
-        // details: "north → east"
         const dirs = this._parseRotationDetails(ev.details);
         if (!dirs) return null;
         const fromAngle = directionToRadians(dirs.from);
@@ -113,7 +114,6 @@ export class AnimationQueue {
       }
 
       case 'gear': {
-        // details: "cw" or "ccw"
         const currentRotation = this.robotLayer.getRobotRotation(ev.robotId);
         if (currentRotation === null) return null;
         const delta = ev.details === 'cw' ? Math.PI / 2 : -Math.PI / 2;
@@ -126,7 +126,6 @@ export class AnimationQueue {
       }
 
       case 'fall': {
-        // Fade out with slight downward drift
         const pos = this.robotLayer.getRobotPosition(ev.robotId);
         if (!pos) return null;
         return {
@@ -142,7 +141,6 @@ export class AnimationQueue {
       }
 
       case 'respawn': {
-        // Fade in at new position
         if (!ev.to) return null;
         const to = boardToPixel(ev.to);
         this.robotLayer.setRobotPosition(ev.robotId, to.x, to.y);
@@ -158,7 +156,6 @@ export class AnimationQueue {
 
       case 'laser_hit':
       case 'flamer': {
-        // Red/orange flash on hit robot
         return {
           robotId: ev.robotId,
           type: 'flash',
@@ -167,7 +164,6 @@ export class AnimationQueue {
       }
 
       case 'crusher': {
-        // Crush animation — squash effect via fade out
         const crusherPos = this.robotLayer.getRobotPosition(ev.robotId);
         if (!crusherPos) return null;
         return {
@@ -183,11 +179,8 @@ export class AnimationQueue {
       }
 
       case 'portal': {
-        // Teleport: fade out at source, fade in at destination
         if (!ev.from || !ev.to) return null;
-        const portalFrom = boardToPixel(ev.from);
         const portalTo = boardToPixel(ev.to);
-        // Position robot at destination immediately, animate as fade-in
         this.robotLayer.setRobotPosition(ev.robotId, portalTo.x, portalTo.y);
         this.robotLayer.setRobotAlpha(ev.robotId, 0);
         return {
@@ -200,7 +193,6 @@ export class AnimationQueue {
 
       case 'flag':
       case 'repair':
-        // No visual tween needed
         return null;
 
       default:
@@ -210,29 +202,26 @@ export class AnimationQueue {
 
   _parseRotationDetails(details) {
     if (!details) return null;
-    // Format: "north → east" or "north -> east"
     const match = details.match(/^(\w+)\s*(?:→|->)\s*(\w+)$/);
     if (!match) return null;
-    return {
-      from: match[1],
-      to: match[2],
-    };
+    return { from: match[1], to: match[2] };
   }
 
   _runGroup(group) {
     return new Promise((resolve) => {
       this.resolvePromise = resolve;
-      let elapsed = 0;
       const duration = group.durationMs;
+      let startTime = null;
 
-      const onTick = (tick) => {
+      const onFrame = (timestamp) => {
         if (this.cancelled) {
-          this.ticker.remove(onTick);
+          this.resolvePromise = null;
           resolve();
           return;
         }
 
-        elapsed += tick.deltaMS;
+        if (!startTime) startTime = timestamp;
+        const elapsed = timestamp - startTime;
         const t = Math.min(elapsed / duration, 1);
         const eased = easeInOutCubic(t);
 
@@ -241,13 +230,15 @@ export class AnimationQueue {
         }
 
         if (t >= 1) {
-          this.ticker.remove(onTick);
+          this._rafId = null;
           this.resolvePromise = null;
           resolve();
+        } else {
+          this._rafId = requestAnimationFrame(onFrame);
         }
       };
 
-      this.ticker.add(onTick);
+      this._rafId = requestAnimationFrame(onFrame);
     });
   }
 
@@ -295,7 +286,6 @@ export class AnimationQueue {
         break;
 
       case 'flash':
-        // Flash effect: briefly tint robot red then back
         if (t < 0.5) {
           this.robotLayer.setRobotTint(tween.robotId, tween.color);
         } else {

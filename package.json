@@ -11,14 +11,10 @@
     "build": "pnpm -r run build",
     "test": "pnpm -r run test",
     "lint": "pnpm -r run lint",
-    "clean": "pnpm -r run clean",
-    "extract-tiles": "node scripts/extract-svg-paths.js"
+    "clean": "pnpm -r run clean"
   },
   "engines": {
     "node": ">=20"
   },
-  "packageManager": "pnpm@9.15.4",
-  "devDependencies": {
-    "fast-xml-parser": "^5.5.6"
-  }
+  "packageManager": "pnpm@9.15.4"
 }

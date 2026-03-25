@@ -1,18 +1,16 @@
-import '../styles/board-canvas.css';
-import { Application, Container } from 'pixi.js';
-import { TileLayer } from '../lib/board-renderer/TileLayer.js';
-import { RobotLayer } from '../lib/board-renderer/RobotLayer.js';
-import { AnimationQueue } from '../lib/board-renderer/AnimationQueue.js';
+import '../styles/board-dom.css';
+import { DomTileLayer } from '../lib/board-renderer/DomTileLayer.js';
+import { DomRobotLayer } from '../lib/board-renderer/DomRobotLayer.js';
+import { DomAnimationQueue } from '../lib/board-renderer/DomAnimationQueue.js';
 import { TILE_SIZE, TILE_GAP, BOARD_PADDING, MAX_SCALE } from '../lib/board-renderer/constants.js';
 
-let app = null;
-let boardContainer = null;
 let tileLayer = null;
 let robotLayer = null;
 let animationQueue = null;
+let scalerEl = null;
+let containerEl = null;
 let resizeObserver = null;
 let initialized = false;
-let containerEl = null;
 let isAnimating = false;
 let currentBoard = null;
 let currentFlags = null;
@@ -24,39 +22,49 @@ export async function initBoardCanvas(el, gameState, myPlayerId) {
   containerEl = el;
   currentBoard = gameState.board;
 
-  app = new Application();
-  await app.init({
-    background: 0x0f0f1a,
-    antialias: true,
-    width: el.clientWidth || 800,
-    height: el.clientHeight || 600,
-  });
+  // Container structure
+  const domContainer = document.createElement('div');
+  domContainer.className = 'board-dom-container';
 
-  el.appendChild(app.canvas);
+  scalerEl = document.createElement('div');
+  scalerEl.className = 'board-scaler';
+  domContainer.appendChild(scalerEl);
 
-  boardContainer = new Container();
-  app.stage.addChild(boardContainer);
+  tileLayer = new DomTileLayer();
+  scalerEl.appendChild(tileLayer.element);
 
-  tileLayer = new TileLayer();
-  boardContainer.addChild(tileLayer.container);
-
-  robotLayer = new RobotLayer();
+  robotLayer = new DomRobotLayer();
   robotLayer.setMyPlayerId(myPlayerId);
-  boardContainer.addChild(robotLayer.container);
+  scalerEl.appendChild(robotLayer.element);
 
-  animationQueue = new AnimationQueue(robotLayer, app.ticker);
+  animationQueue = new DomAnimationQueue(robotLayer);
 
   // Build initial board
   currentFlags = gameState.flags;
   tileLayer.build(gameState.board, currentFlags);
   robotLayer.syncRobots(gameState.robots);
 
+  el.appendChild(domContainer);
+
+  // Wait for layout dimensions (flex container may not have width yet)
+  await new Promise(resolve => {
+    if (el.clientWidth > 0 && el.clientHeight > 0) {
+      resolve();
+      return;
+    }
+    const layoutObserver = new ResizeObserver(() => {
+      if (el.clientWidth > 0 && el.clientHeight > 0) {
+        layoutObserver.disconnect();
+        resolve();
+      }
+    });
+    layoutObserver.observe(el);
+  });
+
   fitBoard(gameState);
 
-  // Observe container resizes
   resizeObserver = new ResizeObserver(() => {
-    if (app && el.clientWidth > 0 && el.clientHeight > 0) {
-      app.renderer.resize(el.clientWidth, el.clientHeight);
+    if (containerEl && containerEl.clientWidth > 0 && containerEl.clientHeight > 0) {
       fitBoard();
     }
   });
@@ -64,7 +72,7 @@ export async function initBoardCanvas(el, gameState, myPlayerId) {
 }
 
 function fitBoard(gameState) {
-  if (!app || !boardContainer || !containerEl) return;
+  if (!scalerEl || !containerEl) return;
 
   const board = gameState?.board ?? currentBoard;
   if (!board) return;
@@ -78,9 +86,10 @@ function fitBoard(gameState) {
 
   const scale = Math.min(availW / boardW, availH / boardH, MAX_SCALE);
 
-  boardContainer.scale.set(scale, scale);
-  boardContainer.x = (containerEl.clientWidth - boardW * scale) / 2;
-  boardContainer.y = (containerEl.clientHeight - boardH * scale) / 2;
+  const offsetX = (containerEl.clientWidth - boardW * scale) / 2;
+  const offsetY = (containerEl.clientHeight - boardH * scale) / 2;
+
+  scalerEl.style.transform = `translate(${offsetX}px, ${offsetY}px) scale(${scale})`;
 }
 
 export function destroyBoardCanvas() {
@@ -88,14 +97,10 @@ export function destroyBoardCanvas() {
     resizeObserver.disconnect();
     resizeObserver = null;
   }
-  if (app) {
-    app.destroy(true, { children: true });
-    app = null;
-  }
-  boardContainer = null;
   tileLayer = null;
   robotLayer = null;
   animationQueue = null;
+  scalerEl = null;
   initialized = false;
   containerEl = null;
   isAnimating = false;
@@ -124,7 +129,6 @@ export async function animateEvents(events, robots) {
     await animationQueue.animate(events, robots);
   } finally {
     isAnimating = false;
-    // Final snap to ensure consistency
     if (robots) robotLayer.syncRobots(robots);
   }
 }

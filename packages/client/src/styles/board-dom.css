@@ -1,0 +1,293 @@
+/* ─── Board DOM Renderer ──────────────────────────────────────────── */
+
+.board-dom-container {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: #0f0f1a;
+}
+
+.board-scaler {
+  position: absolute;
+  transform-origin: 0 0;
+}
+
+/* ─── Tile Layer ─────────────────────────────────────────────────── */
+
+.tile-layer {
+  position: relative;
+}
+
+.tile-cell {
+  position: absolute;
+  overflow: hidden;
+}
+
+.tile-cell .tile-img,
+.tile-cell .tile-fallback {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.tile-cell .tile-img {
+  image-rendering: auto;
+  pointer-events: none;
+}
+
+.tile-cell .tile-fallback {
+  opacity: 0.6;
+}
+
+/* ─── Walls ──────────────────────────────────────────────────────── */
+
+.tile-wall {
+  position: absolute;
+  pointer-events: none;
+}
+
+.tile-wall-north {
+  top: 0; left: 0; right: 0;
+  height: 0;
+  border-top: 4px solid #ff8800;
+}
+
+.tile-wall-south {
+  bottom: 0; left: 0; right: 0;
+  height: 0;
+  border-bottom: 4px solid #ff8800;
+}
+
+.tile-wall-east {
+  top: 0; right: 0; bottom: 0;
+  width: 0;
+  border-right: 4px solid #ff8800;
+}
+
+.tile-wall-west {
+  top: 0; left: 0; bottom: 0;
+  width: 0;
+  border-left: 4px solid #ff8800;
+}
+
+.tile-wall-oneway {
+  border-style: dashed;
+}
+
+/* ─── Tile Symbol ────────────────────────────────────────────────── */
+
+.tile-symbol {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  color: rgba(255, 255, 255, 0.4);
+  font-size: 16px;
+  font-family: sans-serif;
+  pointer-events: none;
+  line-height: 1;
+}
+
+/* ─── Laser mount ────────────────────────────────────────────────── */
+
+.laser-mount {
+  position: absolute;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #ff2222;
+  pointer-events: none;
+  font-size: 7px;
+  color: #fff;
+  text-align: center;
+  line-height: 6px;
+}
+
+.laser-mount-north { top: 0; left: 50%; transform: translate(-50%, -50%); }
+.laser-mount-south { bottom: 0; left: 50%; transform: translate(-50%, 50%); }
+.laser-mount-east { right: 0; top: 50%; transform: translate(50%, -50%); }
+.laser-mount-west { left: 0; top: 50%; transform: translate(-50%, -50%); }
+
+/* ─── Pusher mount ───────────────────────────────────────────────── */
+
+.pusher-mount {
+  position: absolute;
+  background: #8888cc;
+  pointer-events: none;
+}
+
+.pusher-mount-north { top: 0; left: 50%; width: 16px; height: 4px; transform: translateX(-50%); }
+.pusher-mount-south { bottom: 0; left: 50%; width: 16px; height: 4px; transform: translateX(-50%); }
+.pusher-mount-east { right: 0; top: 50%; width: 4px; height: 16px; transform: translateY(-50%); }
+.pusher-mount-west { left: 0; top: 50%; width: 4px; height: 16px; transform: translateY(-50%); }
+
+/* ─── Feature phases ─────────────────────────────────────────────── */
+
+.feature-phases {
+  position: absolute;
+  font-size: 6px;
+  color: #f39c12;
+  font-family: sans-serif;
+  pointer-events: none;
+  opacity: 0.8;
+}
+
+.feature-phases-north { top: 5px; left: 50%; transform: translateX(-50%); }
+.feature-phases-south { bottom: 5px; left: 50%; transform: translateX(-50%); }
+.feature-phases-east { right: 5px; top: 50%; transform: translateY(-50%); }
+.feature-phases-west { left: 5px; top: 50%; transform: translateY(-50%); }
+
+/* ─── Overlay indicator ──────────────────────────────────────────── */
+
+.overlay-indicator {
+  position: absolute;
+  bottom: 2px;
+  left: 8px;
+  width: 6px;
+  height: 6px;
+  transform: rotate(45deg);
+  border: 1px solid;
+  opacity: 0.7;
+  pointer-events: none;
+}
+
+.overlay-phases {
+  position: absolute;
+  top: -1px;
+  left: 10px;
+  font-size: 6px;
+  color: #f39c12;
+  transform: rotate(-45deg);
+  transform-origin: left center;
+  opacity: 0.8;
+  white-space: nowrap;
+}
+
+/* ─── Phase indicators ───────────────────────────────────────────── */
+
+.tile-phases {
+  position: absolute;
+  bottom: 2px;
+  right: 2px;
+  font-size: 6px;
+  color: #f39c12;
+  font-family: sans-serif;
+  pointer-events: none;
+  opacity: 0.8;
+}
+
+/* ─── Group label (portals) ──────────────────────────────────────── */
+
+.tile-group {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.7);
+  font-weight: bold;
+  font-family: sans-serif;
+  pointer-events: none;
+}
+
+/* ─── Elevation indicator ────────────────────────────────────────── */
+
+.tile-elevation {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  font-size: 8px;
+  color: #ccaa44;
+  font-weight: bold;
+  font-family: sans-serif;
+  pointer-events: none;
+  opacity: 0.8;
+}
+
+/* ─── Laser beam overlay ─────────────────────────────────────────── */
+
+.laser-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  pointer-events: none;
+}
+
+/* ─── Flag badge ─────────────────────────────────────────────────── */
+
+.flag-badge {
+  position: absolute;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.6);
+  color: #ffd700;
+  font-size: 10px;
+  font-weight: bold;
+  font-family: sans-serif;
+  text-align: center;
+  line-height: 16px;
+  pointer-events: none;
+}
+
+/* ─── Selection / Hover highlights ───────────────────────────────── */
+
+.selection-highlight {
+  position: absolute;
+  border: 2px solid #ffd700;
+  pointer-events: none;
+  box-sizing: border-box;
+}
+
+.hover-highlight {
+  position: absolute;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  pointer-events: none;
+  box-sizing: border-box;
+}
+
+/* ─── Grid overlay ───────────────────────────────────────────────── */
+
+.grid-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  pointer-events: none;
+}
+
+/* ─── Robot layer ────────────────────────────────────────────────── */
+
+.robot-layer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.robot {
+  position: absolute;
+  will-change: transform, opacity;
+  pointer-events: none;
+}
+
+.robot-circle {
+  width: 100%;
+  height: 100%;
+}
+
+.robot-label {
+  position: absolute;
+  bottom: -12px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 7px;
+  color: #ffd700;
+  font-weight: bold;
+  font-family: sans-serif;
+  letter-spacing: 0.5px;
+  white-space: nowrap;
+}

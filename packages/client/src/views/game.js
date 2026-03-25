@@ -316,41 +316,58 @@ function renderPlayerInfo() {
   `;
 }
 
+// --- Persistent wrapper refs (survive updateDOM calls) ---
+
+let headerWrapper = null;
+let boardWrapper = null;
+let controlsWrapper = null;
+
 // --- Main render & update ---
 
 function updateDOM() {
   if (!containerRef) return;
 
-  containerRef.innerHTML = `
-    <div class="game-view">
-      ${renderHeader()}
-      ${renderWinnerBanner()}
-      ${game.error ? `<p class="error">${game.error}</p>` : ''}
-      ${renderBoardArea()}
-      ${renderProgrammingControls()}
-      ${renderExecutingControls()}
-      ${renderRespawnDirectionPanel()}
-      ${renderPlayerInfo()}
-    </div>
+  // First call: build persistent layout structure
+  if (!headerWrapper) {
+    containerRef.innerHTML = `
+      <div class="game-view">
+        <div id="game-header-wrapper"></div>
+        <div id="game-board-wrapper"></div>
+        <div id="game-controls-wrapper"></div>
+      </div>
+    `;
+    headerWrapper = containerRef.querySelector('#game-header-wrapper');
+    boardWrapper = containerRef.querySelector('#game-board-wrapper');
+    controlsWrapper = containerRef.querySelector('#game-controls-wrapper');
+  }
+
+  // Update header + controls (non-board sections)
+  headerWrapper.innerHTML = `
+    ${renderHeader()}
+    ${renderWinnerBanner()}
+    ${game.error ? `<p class="error">${game.error}</p>` : ''}
+  `;
+
+  // Board area: only render once, preserve across updates
+  if (!boardWrapper.querySelector('#board-canvas-container') && game.gameState) {
+    boardWrapper.innerHTML = renderBoardArea();
+  }
+
+  controlsWrapper.innerHTML = `
+    ${renderProgrammingControls()}
+    ${renderExecutingControls()}
+    ${renderRespawnDirectionPanel()}
+    ${renderPlayerInfo()}
   `;
 
   attachEventListeners();
 
-  // Init or restore PixiJS board
-  const canvasEl = containerRef.querySelector('#board-canvas-container');
-  if (canvasEl && game.gameState) {
-    if (!isInitialized()) {
-      requestAnimationFrame(() => {
-        initBoardCanvas(canvasEl, game.gameState, auth.user?.id);
-      });
-    } else {
-      // Re-append the canvas if it's been orphaned by innerHTML replacement
-      // Instead, for PixiJS we need to reinit after full DOM replacement
-      requestAnimationFrame(() => {
-        destroyBoardCanvas();
-        initBoardCanvas(canvasEl, game.gameState, auth.user?.id);
-      });
-    }
+  // Init board canvas (only once — DOM element persists)
+  const canvasEl = boardWrapper.querySelector('#board-canvas-container');
+  if (canvasEl && game.gameState && !isInitialized()) {
+    requestAnimationFrame(() => {
+      initBoardCanvas(canvasEl, game.gameState, auth.user?.id);
+    });
   }
 }
 
@@ -648,4 +665,7 @@ export function unmount() {
   destroyBoardCanvas();
   containerRef = null;
   currentGameId = null;
+  headerWrapper = null;
+  boardWrapper = null;
+  controlsWrapper = null;
 }

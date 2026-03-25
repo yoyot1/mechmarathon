@@ -180,9 +180,11 @@ function renderConveyorTile(tile) {
   if (!url) return createFallbackDiv(tile.type);
 
   const img = createTileImg(url);
+  // CSS transforms apply right-to-left: list rotate first (applied second),
+  // then scaleX (applied first) to match the old PixiJS mirror-then-rotate order.
   const transforms = [];
-  if (mirror) transforms.push('scaleX(-1)');
   if (rotation) transforms.push(`rotate(${rotation}deg)`);
+  if (mirror) transforms.push('scaleX(-1)');
   if (transforms.length) img.style.transform = transforms.join(' ');
 
   return img;

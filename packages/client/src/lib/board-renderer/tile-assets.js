@@ -58,9 +58,6 @@ export function getAvailableTileTypes() {
   for (const type of CONVEYOR_ASSET_TYPES) {
     available.add(type);
   }
-  // pit also has a fallback (colored div), include it
-  available.add('pit');
-  available.add('trap_pit');
   return available;
 }
 

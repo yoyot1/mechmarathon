@@ -250,7 +250,7 @@ describe('smartDraw', () => {
       smartDraw.extend(1, 0, tiles, 4);
       const result = smartDraw.extend(2, 0, tiles, 4);
 
-      expect(result).toEqual({ applied: true });
+      expect(result.applied).toBe(true);
       // Target should gain west entry (merge from west side)
       const merged = t(tiles, 2, 0);
       expect(merged.direction).toBe('south');

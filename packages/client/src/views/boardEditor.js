@@ -6,6 +6,9 @@ import * as history from '../lib/editor/history.js';
 import * as shortcuts from '../lib/editor/shortcuts.js';
 import * as editorCanvas from '../lib/editor/editorCanvas.js';
 import * as smartDraw from '../lib/editor/smartDraw.js';
+import { getAvailableTileTypes } from '../lib/board-renderer/tile-assets.js';
+
+const availableTileTypes = getAvailableTileTypes();
 
 const TYPE_LABELS = {
   floor: 'Floor', conveyor: 'Conveyor', express_conveyor: 'Express', gear_cw: 'Gear CW',
@@ -323,10 +326,11 @@ export function render(container, params) {
       <button class="tool-btn select-tool-btn ${isSelectionMode ? 'active' : ''}" id="select-tool-btn">Select <kbd>V</kbd></button>
       <h4>Board Elements</h4>
       ${BOARD.TILE_TYPES.map((t) => {
+        const isAvailable = availableTileTypes.has(t);
         const isActive = selectedTool === t && isGroundMode;
         const opts = isActive ? renderElementOptions(t, 'ground') : '';
         return `<div class="element-item${opts ? ' has-options' : ''}">
-          <button class="tool-btn ${isActive ? 'active' : ''}" data-tool="${t}">
+          <button class="tool-btn ${isActive ? 'active' : ''} ${!isAvailable ? 'tool-btn-disabled' : ''}" data-tool="${t}" ${!isAvailable ? 'disabled' : ''}>
             ${TYPE_LABELS[t] || t}
           </button>
           ${opts ? `<div class="options-wrapper${wrapperAnim}"><div class="element-options">${opts}</div></div>` : ''}
@@ -738,6 +742,7 @@ export function render(container, params) {
 
   function onCanvasMouseDown(e) {
     if (e.button !== 0) return; // left click only
+    e.preventDefault(); // Prevent browser native drag/selection on DOM tiles
     const pos = editorCanvas.getGridPosition(e);
     if (!pos) return;
 
@@ -764,19 +769,26 @@ export function render(container, params) {
 
   function onCanvasMouseMove(e) {
     const pos = editorCanvas.getGridPosition(e);
+
+    // Smart draw path extension — suppress hover highlight during drag
+    if (smartDraw.isActive()) {
+      editorCanvas.setHoverCell(null, null);
+      if (pos) {
+        const result = smartDraw.extend(pos.gridX, pos.gridY, tiles, BOARD.SIZE);
+        if (result.applied && result.cells) {
+          for (const cell of result.cells) {
+            editorCanvas.updateTile(cell.x, cell.y, tiles);
+          }
+        }
+      }
+      return;
+    }
+
+    // Normal hover highlight
     if (pos) {
       editorCanvas.setHoverCell(pos.gridX, pos.gridY);
     } else {
       editorCanvas.setHoverCell(null, null);
-    }
-
-    // Smart draw path extension
-    if (smartDraw.isActive() && pos) {
-      const result = smartDraw.extend(pos.gridX, pos.gridY, tiles, BOARD.SIZE);
-      if (result.applied) {
-        editorCanvas.rebuildBoard(tiles);
-      }
-      return;
     }
 
     if (!isDragging || !pos) return;
@@ -1010,6 +1022,7 @@ export function render(container, params) {
   const tileKeys = BOARD.TILE_TYPES.slice(0, 9);
   tileKeys.forEach((t, i) => {
     shortcuts.register(String(i + 1), () => {
+      if (!availableTileTypes.has(t)) return;
       selectedTool = t;
       selectedSideFeature = null;
       selectedOverlay = null;

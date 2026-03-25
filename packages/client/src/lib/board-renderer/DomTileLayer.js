@@ -32,6 +32,7 @@ import {
   hexToCss,
 } from './constants.js';
 import { renderTile, renderFloorBase } from './tile-renderer.js';
+import { hasAsset } from './tile-assets.js';
 
 const OPPOSITE = { north: 'south', south: 'north', east: 'west', west: 'east' };
 const DIR_DELTA = { north: { x: 0, y: -1 }, south: { x: 0, y: 1 }, east: { x: 1, y: 0 }, west: { x: -1, y: 0 } };
@@ -166,18 +167,19 @@ export class DomTileLayer {
   }
 
   _addSymbol(tile, cell) {
+    // Skip symbols for tiles with SVG assets — the artwork is sufficient
+    const type = tile.type;
+    if (type === 'conveyor' || type === 'express_conveyor') return;
+    if (hasAsset(type)) return;
+
     let symbol;
 
-    if (tile.type === 'conveyor' && tile.direction) {
+    if (type === 'current' && tile.direction) {
       symbol = CONVEYOR_ARROWS[tile.direction];
-    } else if (tile.type === 'express_conveyor' && tile.direction) {
-      symbol = EXPRESS_CONVEYOR_ARROWS[tile.direction];
-    } else if (tile.type === 'current' && tile.direction) {
-      symbol = CONVEYOR_ARROWS[tile.direction];
-    } else if (tile.type === 'ramp' && tile.direction) {
+    } else if (type === 'ramp' && tile.direction) {
       symbol = RAMP_ARROWS[tile.direction];
     } else {
-      symbol = TILE_SYMBOLS[tile.type];
+      symbol = TILE_SYMBOLS[type];
     }
 
     if (!symbol) return;

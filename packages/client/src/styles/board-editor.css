@@ -78,6 +78,11 @@
   color: white;
 }
 
+.tool-btn-disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
 .direction-picker {
   display: grid;
   grid-template-columns: repeat(3, 1fr);

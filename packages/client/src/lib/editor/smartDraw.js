@@ -60,22 +60,19 @@ export function extend(x, y, tiles, boardSize) {
   const currentTile = tiles[last.y]?.[last.x];
   if (currentTile && hasExitWall(currentTile, moveDir)) {
     stopPath(moveDir);
-    applyPath(tiles);
-    return { applied: true };
+    return { applied: true, cells: applyPath(tiles) };
   }
 
   // Check bounds
   if (x < 0 || y < 0 || x >= boardSize || y >= boardSize) {
     stopPath(moveDir);
-    applyPath(tiles);
-    return { applied: true };
+    return { applied: true, cells: applyPath(tiles) };
   }
 
   const targetTile = tiles[y]?.[x];
   if (targetTile && hasEntryWall(targetTile, moveDir)) {
     stopPath(moveDir);
-    applyPath(tiles);
-    return { applied: true };
+    return { applied: true, cells: applyPath(tiles) };
   }
 
   // Set exitDir on current path cell
@@ -106,19 +103,19 @@ export function extend(x, y, tiles, boardSize) {
           doMerge(tiles, x, y, newEntryDir);
         }
         stopped = true;
-        applyPath(tiles);
-        return { applied: true };
+        const cells = applyPath(tiles);
+        // doMerge also modified the target tile — include it
+        if (!isStartCell) cells.push({ x, y });
+        return { applied: true, cells };
       } else {
         // Can't merge — stop, last cell exits toward blocked cell
         stopPath(moveDir);
-        applyPath(tiles);
-        return { applied: true };
+        return { applied: true, cells: applyPath(tiles) };
       }
     } else if (targetType !== 'floor') {
       // Non-floor, non-same-conveyor — stop
       stopPath(moveDir);
-      applyPath(tiles);
-      return { applied: true };
+      return { applied: true, cells: applyPath(tiles) };
     }
   }
 
@@ -126,8 +123,7 @@ export function extend(x, y, tiles, boardSize) {
   const entryDir = OPPOSITE[moveDir];
   path.push({ x, y, entryDir, exitDir: null });
   visited.add(`${x},${y}`);
-  applyPath(tiles);
-  return { applied: true };
+  return { applied: true, cells: applyPath(tiles) };
 }
 
 export function finish(tiles, selectedDirection) {
@@ -145,8 +141,8 @@ export function finish(tiles, selectedDirection) {
     last.exitDir = OPPOSITE[last.entryDir];
   }
 
-  applyPath(tiles);
-  const result = { applied: true };
+  const cells = applyPath(tiles);
+  const result = { applied: true, cells };
   cancel();
   return result;
 }
@@ -169,6 +165,7 @@ function stopPath(moveDir) {
 }
 
 function applyPath(tiles) {
+  const affected = [];
   for (const cell of path) {
     if (!cell.exitDir) continue; // Not finalized yet (e.g. single cell mid-drag)
 
@@ -198,7 +195,9 @@ function applyPath(tiles) {
     if (existing.elevation > 0) newTile.elevation = existing.elevation;
 
     tiles[cell.y][cell.x] = newTile;
+    affected.push({ x: cell.x, y: cell.y });
   }
+  return affected;
 }
 
 function canMerge(tile, newEntryDir) {

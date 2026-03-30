@@ -287,6 +287,29 @@
   color: #fff;
 }
 
+.tile-info-hints {
+  margin-top: 0.5rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid #333;
+  color: #888;
+  font-size: 0.72rem;
+}
+
+.tile-info-hints strong {
+  color: #aaa;
+  display: block;
+  margin-bottom: 0.25rem;
+}
+
+.tile-info-hint {
+  margin-bottom: 0.15rem;
+}
+
+.hint-key {
+  color: #7ec8e3;
+  font-weight: 600;
+}
+
 .btn-remove-sf,
 .btn-remove-overlay,
 .btn-remove-ow {

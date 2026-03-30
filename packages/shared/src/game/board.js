@@ -74,10 +74,10 @@ export function getDefaultFlags() {
   ];
 }
 
-const DIRECTION_ORDER = ['north', 'east', 'south', 'west'];
+export const DIRECTION_ORDER = ['north', 'east', 'south', 'west'];
 
 /** Rotate a direction string CW by 90° increments (rotation = 0/90/180/270) */
-function rotateDirBy(dir, rotation) {
+export function rotateDirBy(dir, rotation) {
   if (!dir || rotation === 0) return dir;
   const idx = DIRECTION_ORDER.indexOf(dir);
   if (idx === -1) return dir;
@@ -92,7 +92,7 @@ function rotateWalls(walls, rotation) {
 }
 
 /** Rotate a tile's direction, walls, entry, sideFeatures, and overlays CW by rotation degrees */
-function rotateTile(tile, rotation) {
+export function rotateTile(tile, rotation) {
   if (rotation === 0) return { ...tile };
   const rotated = { ...tile };
   if (rotated.direction) {

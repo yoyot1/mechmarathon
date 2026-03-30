@@ -6,6 +6,7 @@ import * as history from '../lib/editor/history.js';
 import * as shortcuts from '../lib/editor/shortcuts.js';
 import * as editorCanvas from '../lib/editor/editorCanvas.js';
 import * as smartDraw from '../lib/editor/smartDraw.js';
+import { cycleTile, getActionFromEvent, detectEdge, getModifierHints } from '../lib/editor/tileCycler.js';
 import { getAvailableTileTypes } from '../lib/board-renderer/tile-assets.js';
 
 const availableTileTypes = getAvailableTileTypes();
@@ -501,6 +502,16 @@ export function render(container, params) {
         </div>`);
       }
     }
+    // Modifier hints for modify-in-place
+    const hints = getModifierHints(tile);
+    if (hints.length > 0) {
+      parts.push('<div class="tile-info-hints"><strong>Modify</strong>');
+      for (const h of hints) {
+        parts.push(`<div class="tile-info-hint"><span class="hint-key">${h.modifier}</span> ${h.description}</div>`);
+      }
+      parts.push('</div>');
+    }
+
     return `<div class="tile-info">${parts.join('')}</div>`;
   }
 
@@ -746,17 +757,51 @@ export function render(container, params) {
     const pos = editorCanvas.getGridPosition(e);
     if (!pos) return;
 
-    // Smart draw for conveyor tools in ground mode
+    // Ground mode: check if clicked tile matches selected tool → cycle in place
     const isGroundMode = selectedTool !== null && !wallMode && !oneWayWallMode && !selectedSideFeature && !selectedOverlay;
-    if (isGroundMode && SMART_DRAW_TOOLS.has(selectedTool)) {
-      history.push(tiles);
-      smartDraw.start(pos.gridX, pos.gridY, selectedTool, tiles);
-      return;
+    if (isGroundMode) {
+      const existingTile = tiles[pos.gridY][pos.gridX];
+      if (existingTile.type === selectedTool) {
+        // Tile matches tool — cycle in place instead of repaint
+        const action = getActionFromEvent(e);
+        const edgeDir = detectEdge(pos);
+
+        const newTile = cycleTile(existingTile, action, edgeDir);
+        if (newTile) {
+          history.push(tiles);
+          tiles[pos.gridY][pos.gridX] = newTile;
+          editorCanvas.updateTile(pos.gridX, pos.gridY, tiles);
+          selectedCell = { x: pos.gridX, y: pos.gridY };
+          update();
+        }
+        return;
+      }
+      // Different type — fall through to smart draw or normal paint
+      if (SMART_DRAW_TOOLS.has(selectedTool)) {
+        history.push(tiles);
+        smartDraw.start(pos.gridX, pos.gridY, selectedTool, tiles);
+        return;
+      }
     }
 
-    // Selection mode: select tile without modifying
+    // Selection mode: select tile, or cycle on re-click
     if (selectedTool === null && !wallMode && !oneWayWallMode && !selectedSideFeature && !selectedOverlay) {
-      selectedCell = { x: pos.gridX, y: pos.gridY };
+      const x = pos.gridX, y = pos.gridY;
+      const isReselect = selectedCell?.x === x && selectedCell?.y === y;
+
+      if (isReselect) {
+        const action = getActionFromEvent(e);
+        const edgeDir = detectEdge(pos);
+
+        const newTile = cycleTile(tiles[y][x], action, edgeDir);
+        if (newTile) {
+          history.push(tiles);
+          tiles[y][x] = newTile;
+          editorCanvas.updateTile(x, y, tiles);
+        }
+      } else {
+        selectedCell = { x, y };
+      }
       update();
       return;
     }

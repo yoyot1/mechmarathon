@@ -1,6 +1,6 @@
 export { createDeck, shuffleDeck, dealCards } from './deck.js';
 export { directionDelta, rotateDirection, oppositeDirection, isInBounds, getTile, isPit, isWallBlocking, findRobotAt, findSideFeatures, findOverlays, findMatchingPortal, getElevationDamage } from './movement.js';
-export { DEFAULT_BOARD, getDefaultFlags, createEmptyBoard, rotateBoard, assembleMap } from './board.js';
+export { DEFAULT_BOARD, getDefaultFlags, createEmptyBoard, rotateBoard, assembleMap, rotateTile, rotateDirBy, DIRECTION_ORDER } from './board.js';
 export {
   executeCard, moveRobot,
   processExpressConveyors, processAllConveyors, processCurrents, processGears,

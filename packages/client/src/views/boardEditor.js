@@ -52,6 +52,7 @@ let error = '';
 let isDragging = false;
 let lastDragCell = null;
 let selectedCell = null;
+let inspectedCell = null; // last interacted tile — shown in sidebar even without selection
 let lastExpandedKey = null;
 let showShortcutsHelp = false;
 let canvasInitialized = false;
@@ -92,6 +93,7 @@ function performUndo() {
   const restored = history.undo(tiles);
   if (restored) {
     tiles = restored;
+    editorCanvas.rebuildBoard(tiles);
     update();
   }
 }
@@ -100,6 +102,7 @@ function performRedo() {
   const restored = history.redo(tiles);
   if (restored) {
     tiles = restored;
+    editorCanvas.rebuildBoard(tiles);
     update();
   }
 }
@@ -136,10 +139,17 @@ function onDocumentMouseUp() {
   if (smartDraw.isActive()) {
     const result = smartDraw.finish(tiles, selectedDirection);
     if (result?.singleClick) {
-      // Fall back to normal single-click painting
+      // Single-click paint — lightweight sidebar update only (no reflow flicker)
+      inspectedCell = { x: result.pos.x, y: result.pos.y };
       paintGroundTile(result.pos.x, result.pos.y);
+      updateSidebar();
     } else if (result?.applied) {
+      if (result.cells?.length > 0) {
+        const last = result.cells[result.cells.length - 1];
+        inspectedCell = { x: last.x, y: last.y };
+      }
       editorCanvas.rebuildBoard(tiles);
+      update();
     }
     return;
   }
@@ -182,10 +192,12 @@ export function render(container, params) {
       boardName = board.name;
       boardDescription = board.description || '';
       tiles = board.tiles;
+      editorCanvas.rebuildBoard(tiles);
       update();
     }).catch((e) => {
       error = e.message;
       initTiles();
+      editorCanvas.rebuildBoard(tiles);
       update();
     });
   } else {
@@ -443,26 +455,90 @@ export function render(container, params) {
           ${hasContent ? '\u2713' : '\u2717'} Has non-floor tiles
         </div>
       </div>
-      ${selectedCell ? renderTileInfo(selectedCell.x, selectedCell.y) : ''}
+      ${(selectedCell || inspectedCell) ? renderTileInfo((selectedCell || inspectedCell).x, (selectedCell || inspectedCell).y) : ''}
     `;
 
-    // -- Canvas (PixiJS) --
+    // -- Canvas: init only, no rebuild (callers that change tiles call rebuildBoard explicitly) --
     if (!canvasInitialized) {
       canvasInitialized = true;
       editorCanvas.initEditorCanvas(canvasWrapper).then(() => {
         editorCanvas.rebuildBoard(tiles);
-        if (selectedCell) editorCanvas.setSelectedCell(selectedCell.x, selectedCell.y);
+        updateSelection();
       });
     } else {
-      editorCanvas.rebuildBoard(tiles);
-      if (selectedCell) {
-        editorCanvas.setSelectedCell(selectedCell.x, selectedCell.y);
-      } else {
-        editorCanvas.setSelectedCell(null, null);
-      }
+      updateSelection();
     }
 
     attachToolbarSidebarListeners();
+  }
+
+  /** Attach remove-button listeners for tile info (sidebar). */
+  function attachTileInfoListeners() {
+    sidebarWrapper.querySelectorAll('.btn-remove-ow').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        history.push(tiles);
+        const x = parseInt(btn.dataset.owX);
+        const y = parseInt(btn.dataset.owY);
+        const side = btn.dataset.owSide;
+        const tile = tiles[y][x];
+        if (tile.oneWayWalls) {
+          tile.oneWayWalls = tile.oneWayWalls.filter((ow) => ow.side !== side);
+          if (tile.oneWayWalls.length === 0) delete tile.oneWayWalls;
+        }
+        update();
+      });
+    });
+    sidebarWrapper.querySelectorAll('.btn-remove-sf').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        history.push(tiles);
+        const x = parseInt(btn.dataset.sfX);
+        const y = parseInt(btn.dataset.sfY);
+        const side = btn.dataset.sfSide;
+        const type = btn.dataset.sfType;
+        const tile = tiles[y][x];
+        if (tile.sideFeatures) {
+          tile.sideFeatures = tile.sideFeatures.filter((f) => !(f.side === side && f.type === type));
+          if (tile.sideFeatures.length === 0) delete tile.sideFeatures;
+        }
+        update();
+      });
+    });
+    sidebarWrapper.querySelectorAll('.btn-remove-overlay').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        history.push(tiles);
+        const x = parseInt(btn.dataset.ovX);
+        const y = parseInt(btn.dataset.ovY);
+        const type = btn.dataset.ovType;
+        const tile = tiles[y][x];
+        if (tile.overlays) {
+          tile.overlays = tile.overlays.filter((o) => o.type !== type);
+          if (tile.overlays.length === 0) delete tile.overlays;
+        }
+        update();
+      });
+    });
+  }
+
+  /** Lightweight sidebar-only refresh for high-frequency updates (drag painting). */
+  function updateSidebar() {
+    const tileInfoCell = selectedCell || inspectedCell;
+    const tileInfoHtml = tileInfoCell ? renderTileInfo(tileInfoCell.x, tileInfoCell.y) : '';
+    const infoEl = sidebarWrapper.querySelector('.tile-info');
+    if (infoEl) {
+      // Replace existing tile info in place
+      infoEl.outerHTML = tileInfoHtml;
+    } else if (tileInfoHtml) {
+      sidebarWrapper.insertAdjacentHTML('beforeend', tileInfoHtml);
+    }
+    attachTileInfoListeners();
+  }
+
+  function updateSelection() {
+    if (selectedCell) {
+      editorCanvas.setSelectedCell(selectedCell.x, selectedCell.y);
+    } else {
+      editorCanvas.setSelectedCell(null, null);
+    }
   }
 
   function renderTileInfo(x, y) {
@@ -614,6 +690,8 @@ export function render(container, params) {
       history.push(tiles);
       initTiles();
       selectedCell = null;
+      inspectedCell = null;
+      editorCanvas.rebuildBoard(tiles);
       update();
     });
 
@@ -685,54 +763,8 @@ export function render(container, params) {
       });
     });
 
-    // Remove one-way wall buttons in tile info (sidebar)
-    sidebarWrapper.querySelectorAll('.btn-remove-ow').forEach((btn) => {
-      btn.addEventListener('click', () => {
-        history.push(tiles);
-        const x = parseInt(btn.dataset.owX);
-        const y = parseInt(btn.dataset.owY);
-        const side = btn.dataset.owSide;
-        const tile = tiles[y][x];
-        if (tile.oneWayWalls) {
-          tile.oneWayWalls = tile.oneWayWalls.filter((ow) => ow.side !== side);
-          if (tile.oneWayWalls.length === 0) delete tile.oneWayWalls;
-        }
-        update();
-      });
-    });
-
-    // Remove side feature buttons in tile info (sidebar)
-    sidebarWrapper.querySelectorAll('.btn-remove-sf').forEach((btn) => {
-      btn.addEventListener('click', () => {
-        history.push(tiles);
-        const x = parseInt(btn.dataset.sfX);
-        const y = parseInt(btn.dataset.sfY);
-        const side = btn.dataset.sfSide;
-        const type = btn.dataset.sfType;
-        const tile = tiles[y][x];
-        if (tile.sideFeatures) {
-          tile.sideFeatures = tile.sideFeatures.filter((f) => !(f.side === side && f.type === type));
-          if (tile.sideFeatures.length === 0) delete tile.sideFeatures;
-        }
-        update();
-      });
-    });
-
-    // Remove overlay buttons in tile info (sidebar)
-    sidebarWrapper.querySelectorAll('.btn-remove-overlay').forEach((btn) => {
-      btn.addEventListener('click', () => {
-        history.push(tiles);
-        const x = parseInt(btn.dataset.ovX);
-        const y = parseInt(btn.dataset.ovY);
-        const type = btn.dataset.ovType;
-        const tile = tiles[y][x];
-        if (tile.overlays) {
-          tile.overlays = tile.overlays.filter((o) => o.type !== type);
-          if (tile.overlays.length === 0) delete tile.overlays;
-        }
-        update();
-      });
-    });
+    // Remove buttons for one-way walls, side features, overlays in tile info
+    attachTileInfoListeners();
 
     // Name/description inputs (sidebar)
     sidebarWrapper.querySelector('#board-name')?.addEventListener('input', (e) => {
@@ -772,12 +804,18 @@ export function render(container, params) {
           tiles[pos.gridY][pos.gridX] = newTile;
           editorCanvas.updateTile(pos.gridX, pos.gridY, tiles);
           selectedCell = { x: pos.gridX, y: pos.gridY };
-          update();
+          inspectedCell = selectedCell;
+          updateSidebar();
+          updateSelection();
         }
         return;
       }
       // Different type — fall through to smart draw or normal paint
       if (SMART_DRAW_TOOLS.has(selectedTool)) {
+        selectedCell = null;
+        inspectedCell = { x: pos.gridX, y: pos.gridY };
+        updateSidebar();
+        updateSelection();
         history.push(tiles);
         smartDraw.start(pos.gridX, pos.gridY, selectedTool, tiles);
         return;
@@ -802,14 +840,22 @@ export function render(container, params) {
       } else {
         selectedCell = { x, y };
       }
-      update();
+      inspectedCell = selectedCell;
+      updateSidebar();
+      updateSelection();
       return;
     }
+
+    // Clear selection when painting/interacting with a different tool
+    selectedCell = null;
+    inspectedCell = { x: pos.gridX, y: pos.gridY };
+    updateSelection();
 
     isDragging = true;
     lastDragCell = `${pos.gridX},${pos.gridY}`;
     history.push(tiles);
     handleCellInteractionFromPos(pos);
+    updateSidebar();
   }
 
   function onCanvasMouseMove(e) {
@@ -824,6 +870,9 @@ export function render(container, params) {
           for (const cell of result.cells) {
             editorCanvas.updateTile(cell.x, cell.y, tiles);
           }
+          const last = result.cells[result.cells.length - 1];
+          inspectedCell = { x: last.x, y: last.y };
+          updateSidebar();
         }
       }
       return;
@@ -840,7 +889,9 @@ export function render(container, params) {
     const cellKey = `${pos.gridX},${pos.gridY}`;
     if (cellKey === lastDragCell) return;
     lastDragCell = cellKey;
+    inspectedCell = { x: pos.gridX, y: pos.gridY };
     handleCellInteractionFromPos(pos);
+    updateSidebar();
   }
 
   function onCanvasContextMenu(e) {
@@ -848,7 +899,9 @@ export function render(container, params) {
     const pos = editorCanvas.getGridPosition(e);
     if (!pos) return;
     selectedCell = { x: pos.gridX, y: pos.gridY };
-    update();
+    inspectedCell = selectedCell;
+    updateSidebar();
+    updateSelection();
   }
 
   function handleCellInteractionFromPos(pos) {
@@ -873,6 +926,8 @@ export function render(container, params) {
         }
         tiles[y][x] = { ...tile, walls: walls.length > 0 ? walls : undefined };
         editorCanvas.rebuildBoard(tiles);
+        inspectedCell = { x, y };
+        updateSidebar();
       }
       return;
     }
@@ -897,8 +952,11 @@ export function render(container, params) {
           owWalls.push({ side: wallDir, blocks: selectedBlocks });
         }
         tiles[y][x] = { ...tile, oneWayWalls: owWalls.length > 0 ? owWalls : undefined };
+        editorCanvas.updateTile(x, y, tiles);
         selectedCell = { x, y };
-        update();
+        inspectedCell = selectedCell;
+        updateSidebar();
+        updateSelection();
       }
       return;
     }
@@ -933,8 +991,11 @@ export function render(container, params) {
       }
 
       tiles[y][x] = { ...tile, sideFeatures: features.length > 0 ? features : undefined };
+      editorCanvas.updateTile(x, y, tiles);
       selectedCell = { x, y };
-      update();
+      inspectedCell = selectedCell;
+      updateSidebar();
+      updateSelection();
       return;
     }
 
@@ -953,14 +1014,19 @@ export function render(container, params) {
       }
 
       tiles[y][x] = { ...tile, overlays: overlays.length > 0 ? overlays : undefined };
+      editorCanvas.updateTile(x, y, tiles);
       selectedCell = { x, y };
-      update();
+      inspectedCell = selectedCell;
+      updateSidebar();
+      updateSelection();
       return;
     }
 
     if (selectedTool === null) {
       selectedCell = { x, y };
-      update();
+      inspectedCell = selectedCell;
+      updateSidebar();
+      updateSelection();
     } else {
       paintGroundTile(x, y);
     }
@@ -1098,6 +1164,7 @@ export function unmount() {
   lastDragCell = null;
   selectedTool = null;
   selectedCell = null;
+  inspectedCell = null;
   selectedSideFeature = null;
   selectedOverlay = null;
   selectedEntry = [];

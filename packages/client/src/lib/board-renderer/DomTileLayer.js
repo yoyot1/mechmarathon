@@ -90,14 +90,30 @@ export class DomTileLayer {
     if (!this.tileCells[y]) this.tileCells[y] = [];
 
     const old = this.tileCells[y][x];
-    if (old) {
-      this.element.removeChild(old);
-    }
-
     const cellPitch = TILE_SIZE + TILE_GAP;
     const cell = this._buildTileCell(tile, x, y, cellPitch);
+
+    // Update reference immediately to prevent races on rapid updates
     this.tileCells[y][x] = cell;
-    this.element.appendChild(cell);
+
+    // Pre-decode all <img> elements before swapping into the DOM.
+    // This eliminates flicker caused by async SVG decode — the old tile
+    // stays visible until the new tile's images are fully rendered.
+    const imgs = cell.querySelectorAll('img');
+    const decodePromises = Array.from(imgs).map((img) =>
+      img.decode().catch(() => {}), // cached/already-decoded images may reject
+    );
+
+    if (decodePromises.length === 0 || !old) {
+      // No images to decode or no old cell to hold — swap immediately
+      this.element.appendChild(cell);
+      if (old) old.remove();
+    } else {
+      Promise.all(decodePromises).then(() => {
+        this.element.appendChild(cell);
+        if (old.parentNode) old.remove();
+      });
+    }
   }
 
   _buildTileCell(tile, x, y, cellPitch) {

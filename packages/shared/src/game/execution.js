@@ -617,12 +617,10 @@ export function processGears(robots, board) {
     const tile = getTile(board, robot.position);
     if (!tile) continue;
 
-    if (tile.type === 'gear_cw') {
-      robot.direction = rotateDirection(robot.direction, 'cw');
-      events.push({ type: 'gear', robotId: robot.id, direction: robot.direction, details: 'cw' });
-    } else if (tile.type === 'gear_ccw') {
-      robot.direction = rotateDirection(robot.direction, 'ccw');
-      events.push({ type: 'gear', robotId: robot.id, direction: robot.direction, details: 'ccw' });
+    if (tile.type === 'gear') {
+      const gearDir = tile.variant || 'cw';
+      robot.direction = rotateDirection(robot.direction, gearDir);
+      events.push({ type: 'gear', robotId: robot.id, direction: robot.direction, details: gearDir });
     }
   }
 
@@ -874,16 +872,22 @@ export function processFlagRepair(robots, flags) {
   return events;
 }
 
-/** Process repair sites — heal 1 HP (called end-of-turn only) */
+/** Process repair sites — heal based on variant (called end-of-turn only) */
 export function processRepairHeal(robots, board) {
   const events = [];
 
   for (const robot of robots) {
     if (!isAlive(robot)) continue;
     const tile = getTile(board, robot.position);
-    if (tile?.type === 'repair') {
-      robot.health = Math.min(robot.health + 1, GAME.STARTING_HEALTH);
-      events.push({ type: 'repair', robotId: robot.id, to: robot.position });
+    if (tile?.type !== 'repair') continue;
+
+    const variant = tile.variant || 'wrench';
+    const healAmount = variant === 'double_wrench' ? 2 : 1;
+    robot.health = Math.min(robot.health + healAmount, GAME.STARTING_HEALTH);
+    events.push({ type: 'repair', robotId: robot.id, to: { ...robot.position } });
+
+    if (variant === 'hammer_wrench') {
+      events.push({ type: 'option_draw', robotId: robot.id, to: { ...robot.position } });
     }
   }
 

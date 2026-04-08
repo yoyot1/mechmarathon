@@ -686,18 +686,26 @@ describe('processCurrents', () => {
 // --- Gears ---
 
 describe('processGears', () => {
-  it('rotates robot CW on gear_cw', () => {
+  it('rotates robot CW on gear (cw variant)', () => {
     const board = createTestBoard();
-    setTile(board, 5, 5, { type: 'gear_cw' });
+    setTile(board, 5, 5, { type: 'gear', variant: 'cw' });
     const robot = createTestRobot({ direction: 'north', position: { x: 5, y: 5 } });
     const events = processGears([robot], board);
     expect(robot.direction).toBe('east');
     expect(events.some((e) => e.type === 'gear' && e.details === 'cw')).toBe(true);
   });
 
-  it('rotates robot CCW on gear_ccw', () => {
+  it('defaults to CW when no variant specified', () => {
     const board = createTestBoard();
-    setTile(board, 5, 5, { type: 'gear_ccw' });
+    setTile(board, 5, 5, { type: 'gear' });
+    const robot = createTestRobot({ direction: 'north', position: { x: 5, y: 5 } });
+    processGears([robot], board);
+    expect(robot.direction).toBe('east');
+  });
+
+  it('rotates robot CCW on gear (ccw variant)', () => {
+    const board = createTestBoard();
+    setTile(board, 5, 5, { type: 'gear', variant: 'ccw' });
     const robot = createTestRobot({ direction: 'north', position: { x: 5, y: 5 } });
     processGears([robot], board);
     expect(robot.direction).toBe('west');
@@ -712,7 +720,7 @@ describe('processGears', () => {
 
   it('gyroscopic stabilizer grants immunity', () => {
     const board = createTestBoard();
-    setTile(board, 5, 5, { type: 'gear_cw' });
+    setTile(board, 5, 5, { type: 'gear', variant: 'cw' });
     const robot = createTestRobot({ direction: 'north', position: { x: 5, y: 5 }, options: ['gyroscopic_stabilizer'] });
     processGears([robot], board);
     expect(robot.direction).toBe('north');
@@ -720,7 +728,7 @@ describe('processGears', () => {
 
   it('does not rotate dead robot', () => {
     const board = createTestBoard();
-    setTile(board, 5, 5, { type: 'gear_cw' });
+    setTile(board, 5, 5, { type: 'gear', variant: 'cw' });
     const robot = createTestRobot({ direction: 'north', position: { x: 5, y: 5 }, health: 0 });
     processGears([robot], board);
     expect(robot.direction).toBe('north');
@@ -1013,6 +1021,66 @@ describe('processRepairHeal', () => {
     const robot = createTestRobot({ position: { x: 5, y: 5 }, health: 5 });
     processRepairHeal([robot], board);
     expect(robot.health).toBe(5);
+  });
+
+  it('heals 1 HP with explicit wrench variant', () => {
+    const board = createTestBoard();
+    setTile(board, 5, 5, { type: 'repair', variant: 'wrench' });
+    const robot = createTestRobot({ position: { x: 5, y: 5 }, health: 7 });
+    const events = processRepairHeal([robot], board);
+    expect(robot.health).toBe(8);
+    expect(events.filter((e) => e.type === 'repair')).toHaveLength(1);
+    expect(events.some((e) => e.type === 'option_draw')).toBe(false);
+  });
+
+  it('heals 1 HP and emits option_draw with hammer_wrench variant', () => {
+    const board = createTestBoard();
+    setTile(board, 5, 5, { type: 'repair', variant: 'hammer_wrench' });
+    const robot = createTestRobot({ position: { x: 5, y: 5 }, health: 7 });
+    const events = processRepairHeal([robot], board);
+    expect(robot.health).toBe(8);
+    expect(events.some((e) => e.type === 'repair')).toBe(true);
+    expect(events.some((e) => e.type === 'option_draw')).toBe(true);
+  });
+
+  it('heals 2 HP with double_wrench variant', () => {
+    const board = createTestBoard();
+    setTile(board, 5, 5, { type: 'repair', variant: 'double_wrench' });
+    const robot = createTestRobot({ position: { x: 5, y: 5 }, health: 6 });
+    const events = processRepairHeal([robot], board);
+    expect(robot.health).toBe(8);
+    expect(events.some((e) => e.type === 'repair')).toBe(true);
+    expect(events.some((e) => e.type === 'option_draw')).toBe(false);
+  });
+
+  it('double_wrench does not exceed max health', () => {
+    const board = createTestBoard();
+    setTile(board, 5, 5, { type: 'repair', variant: 'double_wrench' });
+    const robot = createTestRobot({ position: { x: 5, y: 5 }, health: GAME.STARTING_HEALTH - 1 });
+    processRepairHeal([robot], board);
+    expect(robot.health).toBe(GAME.STARTING_HEALTH);
+  });
+});
+
+// --- Repair Archive with variants ---
+
+describe('processRepairArchive with variants', () => {
+  it('sets archive position on hammer_wrench repair tile', () => {
+    const board = createTestBoard();
+    setTile(board, 5, 5, { type: 'repair', variant: 'hammer_wrench' });
+    const robot = createTestRobot({ position: { x: 5, y: 5 }, archivePosition: { x: 0, y: 0 } });
+    const events = processRepairArchive([robot], board);
+    expect(robot.archivePosition).toEqual({ x: 5, y: 5 });
+    expect(events.some((e) => e.type === 'repair_archive')).toBe(true);
+  });
+
+  it('sets archive position on double_wrench repair tile', () => {
+    const board = createTestBoard();
+    setTile(board, 5, 5, { type: 'repair', variant: 'double_wrench' });
+    const robot = createTestRobot({ position: { x: 5, y: 5 }, archivePosition: { x: 0, y: 0 } });
+    const events = processRepairArchive([robot], board);
+    expect(robot.archivePosition).toEqual({ x: 5, y: 5 });
+    expect(events.some((e) => e.type === 'repair_archive')).toBe(true);
   });
 });
 
@@ -1485,9 +1553,9 @@ describe('executeRegister', () => {
 
   it('processes board elements in correct order', () => {
     const board = createTestBoard();
-    // Put robot on an express conveyor going east, then a gear_cw
+    // Put robot on an express conveyor going east, then a gear (cw)
     setTile(board, 5, 5, { type: 'express_conveyor', direction: 'east' });
-    setTile(board, 6, 5, { type: 'gear_cw' });
+    setTile(board, 6, 5, { type: 'gear', variant: 'cw' });
 
     const robot = createTestRobot({
       id: 'r1', playerId: 'p1', direction: 'north', position: { x: 5, y: 5 },
@@ -1499,8 +1567,8 @@ describe('executeRegister', () => {
 
     executeRegister(1, playerCards, [robot], board, []);
     // After u-turn: direction = south
-    // Express conveyor moves east to (6,5) — gear_cw tile
-    // All conveyors also fire: robot is now on gear_cw (not a conveyor), so no additional move
+    // Express conveyor moves east to (6,5) — gear (cw) tile
+    // All conveyors also fire: robot is now on gear (not a conveyor), so no additional move
     // Gear rotates: south → west
     expect(robot.position).toEqual({ x: 6, y: 5 });
     expect(robot.direction).toBe('west');

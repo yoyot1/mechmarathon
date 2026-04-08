@@ -46,8 +46,8 @@ The key must match the tile type used in the game engine.
 | `trap_pit.svg`          | `trap_pit`          | No floor underneath. Phase-activated pit.               |
 | `drain.svg`             | `drain`             | No floor underneath.                                    |
 | `radioactive_drain.svg` | `radioactive_drain` | No floor underneath.                                    |
-| `gear_cw.svg`           | `gear_cw`           | Clockwise gear.                                         |
-| `gear_ccw.svg`          | `gear_ccw`          | Counter-clockwise gear.                                 |
+| `gear_cw.svg`           | `gear` (variant: cw) | Clockwise gear.                                        |
+| `gear_ccw.svg`          | `gear` (variant: ccw)| Counter-clockwise gear.                                |
 | `repair.svg`            | `repair`            | Repair/archive site.                                    |
 | `spawn.svg`             | `spawn`             | Robot spawn point.                                      |
 | `oil_slick.svg`         | `oil_slick`         | Slippery tile.                                          |

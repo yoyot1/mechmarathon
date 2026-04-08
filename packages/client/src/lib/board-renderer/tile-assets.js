@@ -17,6 +17,7 @@ import gearCwUrl from '../../assets/tiles/gear_cw.svg';
 import gearCcwUrl from '../../assets/tiles/gear_ccw.svg';
 import hammerWrenchUrl from '../../assets/tiles/hammer_wrench.svg';
 import wrenchUrl from '../../assets/tiles/wrench.svg';
+import wrenchWrenchUrl from '../../assets/tiles/wrench_wrench.svg';
 
 /** Map of asset key → URL for all available SVG tile images */
 export const TILE_ASSETS = {
@@ -31,15 +32,16 @@ export const TILE_ASSETS = {
   express_merge_2curve: expressMerge2curveUrl,
   gear_cw: gearCwUrl,
   gear_ccw: gearCcwUrl,
-  repair: hammerWrenchUrl,
-  spawn: wrenchUrl,
+  repair: wrenchUrl,
+  repair_hammer_wrench: hammerWrenchUrl,
+  repair_double_wrench: wrenchWrenchUrl,
 };
 
-/** Tile types that have a direct asset (non-conveyor, non-directional) */
-const DIRECT_ASSET_TYPES = new Set(['floor', 'gear_cw', 'gear_ccw', 'repair', 'spawn']);
+/** Tile types that have a direct asset key in TILE_ASSETS */
+const DIRECT_ASSET_TYPES = new Set(['floor']);
 
-/** Tile types that use conveyor asset lookup (classify → straight/curve/merge) */
-const CONVEYOR_ASSET_TYPES = new Set(['conveyor', 'express_conveyor']);
+/** Tile types that use variant-based or classified asset lookup (always available) */
+const LOOKUP_ASSET_TYPES = new Set(['conveyor', 'express_conveyor', 'gear', 'repair']);
 
 /** Check if an asset key exists */
 export function hasAsset(key) {
@@ -55,10 +57,32 @@ export function getAvailableTileTypes() {
   for (const type of DIRECT_ASSET_TYPES) {
     if (TILE_ASSETS[type]) available.add(type);
   }
-  for (const type of CONVEYOR_ASSET_TYPES) {
+  for (const type of LOOKUP_ASSET_TYPES) {
     available.add(type);
   }
   return available;
+}
+
+/**
+ * Get the SVG asset URL for a gear tile based on its variant.
+ * @param {object} tile - Tile data with optional variant property
+ * @returns {string}
+ */
+export function getGearAssetUrl(tile) {
+  const variant = tile.variant || 'cw';
+  return variant === 'ccw' ? TILE_ASSETS.gear_ccw : TILE_ASSETS.gear_cw;
+}
+
+/**
+ * Get the SVG asset URL for a repair tile based on its variant.
+ * @param {object} tile - Tile data with optional variant property
+ * @returns {string}
+ */
+export function getRepairAssetUrl(tile) {
+  const variant = tile.variant || 'wrench';
+  if (variant === 'hammer_wrench') return TILE_ASSETS.repair_hammer_wrench;
+  if (variant === 'double_wrench') return TILE_ASSETS.repair_double_wrench;
+  return TILE_ASSETS.repair;
 }
 
 /**

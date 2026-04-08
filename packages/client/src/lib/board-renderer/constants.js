@@ -30,12 +30,10 @@ export const TILE_COLORS = {
   trap_pit: 0x1a0a0a,
   conveyor: 0x0a0a0a,
   express_conveyor: 0x0a0a0a,
-  gear_cw: 0x3a2a1a,
-  gear_ccw: 0x3a1a2a,
+  gear: 0x3a2a1a,
   repair: 0x1a3a3a,
   wall: 0x4a4a4a,
   flag: 0x3a3a1a,
-  spawn: 0x2a2a3e,
   oil_slick: 0x1a1a1a,
   water: 0x1a2a4a,
   current: 0x1a3a5a,
@@ -54,8 +52,7 @@ export const TILE_COLORS = {
 
 /** Tile symbols — non-directional types get a static string */
 export const TILE_SYMBOLS = {
-  gear_cw: '\u21BB',
-  gear_ccw: '\u21BA',
+  gear: '\u21BB',
   repair: '+',
   pit: '\u2716',
   trap_pit: '\u2716',

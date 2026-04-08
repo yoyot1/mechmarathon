@@ -333,8 +333,7 @@
 .composite-cell[data-type="floor"]            { background: #2a2a3e; }
 .composite-cell[data-type="conveyor"]         { background: #0a0a0a; }
 .composite-cell[data-type="express_conveyor"] { background: #0a0a0a; }
-.composite-cell[data-type="gear_cw"]          { background: #4a3a6a; }
-.composite-cell[data-type="gear_ccw"]         { background: #3a4a6a; }
+.composite-cell[data-type="gear"]              { background: #4a3a6a; }
 .composite-cell[data-type="pit"]              { background: #1a1a1a; }
 .composite-cell[data-type="trap_pit"]         { background: #2a1a1a; }
 .composite-cell[data-type="repair"]           { background: #2a5a5a; }

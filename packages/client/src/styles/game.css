@@ -103,8 +103,7 @@
 .tile-pit { background: #0a0a0a; }
 .tile-conveyor { background: #1a3a1a; }
 .tile-express_conveyor { background: #2a1a4a; }
-.tile-gear_cw { background: #3a2a1a; }
-.tile-gear_ccw { background: #3a1a2a; }
+.tile-gear { background: #3a2a1a; }
 .tile-repair { background: #1a3a3a; }
 .tile-wall { background: #4a4a4a; }
 .tile-flag { background: #3a3a1a; }

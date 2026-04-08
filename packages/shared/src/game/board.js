@@ -35,10 +35,10 @@ export const DEFAULT_BOARD = (() => {
   }
 
   // --- Gears ---
-  tiles[3][3] = { type: 'gear_cw' };
-  tiles[3][8] = { type: 'gear_ccw' };
-  tiles[8][3] = { type: 'gear_ccw' };
-  tiles[8][8] = { type: 'gear_cw' };
+  tiles[3][3] = { type: 'gear', variant: 'cw' };
+  tiles[3][8] = { type: 'gear', variant: 'ccw' };
+  tiles[8][3] = { type: 'gear', variant: 'ccw' };
+  tiles[8][8] = { type: 'gear', variant: 'cw' };
 
   // --- Pits ---
   tiles[6][2] = { type: 'pit' };

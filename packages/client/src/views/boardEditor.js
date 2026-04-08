@@ -12,8 +12,8 @@ import { getAvailableTileTypes } from '../lib/board-renderer/tile-assets.js';
 const availableTileTypes = getAvailableTileTypes();
 
 const TYPE_LABELS = {
-  floor: 'Floor', conveyor: 'Conveyor', express_conveyor: 'Express', gear_cw: 'Gear CW',
-  gear_ccw: 'Gear CCW', pit: 'Pit', trap_pit: 'Trap Pit', repair: 'Repair', spawn: 'Spawn',
+  floor: 'Floor', conveyor: 'Conveyor', express_conveyor: 'Express', gear: 'Gear',
+  pit: 'Pit', trap_pit: 'Trap Pit', repair: 'Repair',
   oil_slick: 'Oil Slick', water: 'Water', current: 'Current',
   portal: 'Portal', drain: 'Drain', radioactive_drain: 'Rad. Drain',
   teleporter: 'Teleporter', randomizer: 'Randomizer', repulsor: 'Repulsor',
@@ -43,6 +43,8 @@ let selectedStrength = 1;
 let selectedEntry = [];
 let selectedPhases = [1, 3, 5];
 let selectedGroup = 'A';
+let selectedRepairVariant = 'wrench';
+let selectedGearVariant = 'cw';
 let selectedElevation = 0;
 let wallMode = false;
 let oneWayWallMode = false;
@@ -109,7 +111,7 @@ function performRedo() {
 
 function paintGroundTile(x, y) {
   const newTile = { type: selectedTool };
-  if (['conveyor', 'express_conveyor', 'current', 'ramp'].includes(selectedTool)) {
+  if (['conveyor', 'express_conveyor', 'current', 'ramp', 'repair', 'gear'].includes(selectedTool)) {
     newTile.direction = selectedDirection;
     if (['conveyor', 'express_conveyor'].includes(selectedTool) && selectedEntry.length > 0) {
       newTile.entry = [...selectedEntry];
@@ -120,6 +122,12 @@ function paintGroundTile(x, y) {
   }
   if (selectedTool === 'portal') {
     newTile.group = selectedGroup;
+  }
+  if (selectedTool === 'repair' && selectedRepairVariant !== 'wrench') {
+    newTile.variant = selectedRepairVariant;
+  }
+  if (selectedTool === 'gear') {
+    newTile.variant = selectedGearVariant;
   }
   if (selectedElevation > 0) {
     newTile.elevation = selectedElevation;
@@ -251,9 +259,26 @@ export function render(container, params) {
         `).join('')}
       </div>`;
 
+    const gearVariantHtml = `
+      <span class="option-label">Gear Direction</span>
+      <div class="variant-picker">
+        <button class="variant-btn ${selectedGearVariant === 'cw' ? 'active' : ''}" data-gear-variant="cw">CW</button>
+        <button class="variant-btn ${selectedGearVariant === 'ccw' ? 'active' : ''}" data-gear-variant="ccw">CCW</button>
+      </div>`;
+
+    const repairVariantHtml = `
+      <span class="option-label">Repair Type</span>
+      <div class="variant-picker">
+        <button class="variant-btn ${selectedRepairVariant === 'wrench' ? 'active' : ''}" data-variant="wrench">Wrench</button>
+        <button class="variant-btn ${selectedRepairVariant === 'hammer_wrench' ? 'active' : ''}" data-variant="hammer_wrench">Hammer</button>
+        <button class="variant-btn ${selectedRepairVariant === 'double_wrench' ? 'active' : ''}" data-variant="double_wrench">Double</button>
+      </div>`;
+
     if (category === 'ground') {
       if (key === 'conveyor' || key === 'express_conveyor') return directionHtml + entryHtml;
       if (key === 'current' || key === 'ramp') return directionHtml;
+      if (key === 'gear') return gearVariantHtml + directionHtml;
+      if (key === 'repair') return repairVariantHtml + directionHtml;
       if (key === 'trap_pit') return phaseHtml;
       if (key === 'portal') return groupHtml;
     }
@@ -545,6 +570,14 @@ export function render(container, params) {
     const tile = tiles[y][x];
     const parts = [`<h4>Tile (${x}, ${y})</h4>`];
     parts.push(`<div class="tile-info-row">Ground: <strong>${TYPE_LABELS[tile.type] || tile.type}</strong></div>`);
+    if (tile.type === 'gear') {
+      const gearLabel = { cw: 'Clockwise', ccw: 'Counter-Clockwise' };
+      parts.push(`<div class="tile-info-row">Variant: <strong>${gearLabel[tile.variant || 'cw']}</strong></div>`);
+    }
+    if (tile.type === 'repair') {
+      const variantLabel = { wrench: 'Wrench', hammer_wrench: 'Hammer + Wrench', double_wrench: 'Double Wrench' };
+      parts.push(`<div class="tile-info-row">Variant: <strong>${variantLabel[tile.variant || 'wrench']}</strong></div>`);
+    }
     if (tile.direction) parts.push(`<div class="tile-info-row">Direction: ${tile.direction}</div>`);
     if (tile.elevation > 0) parts.push(`<div class="tile-info-row">Elevation: <strong>${tile.elevation}</strong></div>`);
     if (tile.entry?.length) parts.push(`<div class="tile-info-row">Entry: ${tile.entry.join(', ')}</div>`);
@@ -751,6 +784,22 @@ export function render(container, params) {
     toolbarWrapper.querySelectorAll('.group-btn').forEach((btn) => {
       btn.addEventListener('click', () => {
         selectedGroup = btn.dataset.group;
+        update();
+      });
+    });
+
+    // Variant picker (gear)
+    toolbarWrapper.querySelectorAll('[data-gear-variant]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        selectedGearVariant = btn.dataset.gearVariant;
+        update();
+      });
+    });
+
+    // Variant picker (repair)
+    toolbarWrapper.querySelectorAll('.variant-btn:not([data-gear-variant])').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        selectedRepairVariant = btn.dataset.variant;
         update();
       });
     });

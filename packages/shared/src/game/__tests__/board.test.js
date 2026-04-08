@@ -158,7 +158,7 @@ describe('assembleMap', () => {
   it('assembles two boards vertically', () => {
     const board1 = createEmptyBoard();
     const board2 = createEmptyBoard();
-    board2.tiles[0][0] = { type: 'gear_cw' };
+    board2.tiles[0][0] = { type: 'gear', variant: 'cw' };
     const mapConfig = {
       boards: [
         { boardId: 'b1', x: 0, y: 0, rotation: 0 },
@@ -170,7 +170,7 @@ describe('assembleMap', () => {
     const result = assembleMap(mapConfig, { b1: board1, b2: board2 });
     expect(result.board.width).toBe(12);
     expect(result.board.height).toBe(24);
-    expect(result.board.tiles[12][0].type).toBe('gear_cw');
+    expect(result.board.tiles[12][0].type).toBe('gear');
   });
 
   it('fills gaps with pit tiles', () => {

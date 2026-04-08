@@ -26,6 +26,7 @@ const oneWayWallSchema = z.object({
 const tileSchema = z.object({
   type: z.enum(BOARD.TILE_TYPES),
   direction: directionEnum.optional(),
+  variant: z.enum([...BOARD.GEAR_VARIANTS, ...BOARD.REPAIR_VARIANTS]).optional(),
   walls: z.array(directionEnum).optional(),
   oneWayWalls: z.array(oneWayWallSchema).optional(),
   entry: z.array(directionEnum).optional(),

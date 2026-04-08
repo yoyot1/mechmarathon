@@ -4,7 +4,7 @@
  * Creates <img> elements (or fallback <div>s) for individual tiles.
  * Conveyors are classified and rotated/mirrored to match their orientation.
  */
-import { TILE_ASSETS, getConveyorAssetUrl } from './tile-assets.js';
+import { TILE_ASSETS, getConveyorAssetUrl, getGearAssetUrl, getRepairAssetUrl } from './tile-assets.js';
 import { classifyConveyor, getCurveEntries, hasStraightEntry } from './conveyor-classify.js';
 import { TILE_COLORS, DIRECTION_RADIANS } from './constants.js';
 import { hexToCss } from './constants.js';
@@ -115,6 +115,32 @@ export function renderTile(tile) {
   // Conveyor types: classify and look up correct asset + transform
   if (type === 'conveyor' || type === 'express_conveyor') {
     return renderConveyorTile(tile);
+  }
+
+  // Gear tiles: variant-aware asset lookup + optional rotation
+  if (type === 'gear') {
+    const url = getGearAssetUrl(tile);
+    if (url) {
+      const img = createTileImg(url);
+      if (tile.direction) {
+        img.style.transform = `rotate(${straightRotationDeg(tile.direction)}deg)`;
+      }
+      return img;
+    }
+    return createFallbackDiv(type);
+  }
+
+  // Repair tiles: variant-aware asset lookup + optional rotation
+  if (type === 'repair') {
+    const url = getRepairAssetUrl(tile);
+    if (url) {
+      const img = createTileImg(url);
+      if (tile.direction) {
+        img.style.transform = `rotate(${straightRotationDeg(tile.direction)}deg)`;
+      }
+      return img;
+    }
+    return createFallbackDiv(type);
   }
 
   // Direct asset lookup

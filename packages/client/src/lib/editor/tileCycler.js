@@ -201,9 +201,14 @@ function cycleShapeReverse(tile) {
   return { ...tile, entry: [curveEntries[0], opp], _preferredSide: curveEntries[0] };
 }
 
-/** Swap gear_cw ↔ gear_ccw */
-function swapGear(tile) {
-  return { ...tile, type: tile.type === 'gear_cw' ? 'gear_ccw' : 'gear_cw' };
+/** Cycle gear variant: cw ↔ ccw */
+function cycleGearVariant(tile) {
+  const current = tile.variant || 'cw';
+  return { ...tile, variant: current === 'cw' ? 'ccw' : 'cw' };
+}
+
+function cycleGearVariantReverse(tile) {
+  return cycleGearVariant(tile);
 }
 
 /** Phase presets for trap_pit and similar */
@@ -245,6 +250,24 @@ function cycleGroupReverse(tile) {
   return { ...tile, group: PORTAL_GROUPS[(idx + 3) % 4] };
 }
 
+// ── Repair variant cycling ───────────────────────────────────────────
+
+const REPAIR_VARIANTS = ['wrench', 'hammer_wrench', 'double_wrench'];
+
+function cycleRepairVariant(tile) {
+  const current = tile.variant || 'wrench';
+  const idx = REPAIR_VARIANTS.indexOf(current);
+  const next = REPAIR_VARIANTS[(idx + 1) % REPAIR_VARIANTS.length];
+  return { ...tile, variant: next === 'wrench' ? undefined : next };
+}
+
+function cycleRepairVariantReverse(tile) {
+  const current = tile.variant || 'wrench';
+  const idx = REPAIR_VARIANTS.indexOf(current);
+  const next = REPAIR_VARIANTS[(idx + 2) % REPAIR_VARIANTS.length];
+  return { ...tile, variant: next === 'wrench' ? undefined : next };
+}
+
 // ── Tile-type registry ───────────────────────────────────────────────
 
 const cyclers = {
@@ -262,8 +285,18 @@ const cyclers = {
   ramp: { primary: rotateCW, reverse: rotateCCW },
   trap_pit: { primary: cyclePhases, reverse: cyclePhasesReverse },
   portal: { primary: cycleGroup, reverse: cycleGroupReverse },
-  gear_cw: { primary: swapGear },
-  gear_ccw: { primary: swapGear },
+  gear: {
+    primary: (tile) => rotateCW({ direction: 'north', ...tile }),
+    reverse: (tile) => rotateCCW({ direction: 'north', ...tile }),
+    tertiary: cycleGearVariant,
+    tertiaryReverse: cycleGearVariantReverse,
+  },
+  repair: {
+    primary: (tile) => rotateCW({ direction: 'north', ...tile }),
+    reverse: (tile) => rotateCCW({ direction: 'north', ...tile }),
+    tertiary: cycleRepairVariant,
+    tertiaryReverse: cycleRepairVariantReverse,
+  },
 };
 
 // ── Edge cycling ─────────────────────────────────────────────────────
@@ -422,8 +455,16 @@ const HINT_TABLE = {
     { modifier: 'Click', description: 'Cycle group' },
     { modifier: 'Alt', description: 'Cycle group (reverse)' },
   ],
-  gear_cw: [{ modifier: 'Click', description: 'Swap CW/CCW' }],
-  gear_ccw: [{ modifier: 'Click', description: 'Swap CW/CCW' }],
+  gear: [
+    { modifier: 'Click', description: 'Rotate CW' },
+    { modifier: 'Alt', description: 'Rotate CCW' },
+    { modifier: 'Ctrl', description: 'Cycle variant (CW / CCW)' },
+  ],
+  repair: [
+    { modifier: 'Click', description: 'Rotate CW' },
+    { modifier: 'Alt', description: 'Rotate CCW' },
+    { modifier: 'Ctrl', description: 'Cycle variant (wrench / hammer+wrench / double wrench)' },
+  ],
 };
 
 const EDGE_HINTS = [

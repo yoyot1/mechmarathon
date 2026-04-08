@@ -560,6 +560,37 @@
   min-width: 22px;
 }
 
+.variant-picker {
+  display: flex;
+  gap: 4px;
+}
+
+.variant-btn {
+  padding: 0.3rem 0.6rem;
+  border: 1px solid #333;
+  border-radius: 0.25rem;
+  background: #1a1a2e;
+  color: #ccc;
+  cursor: pointer;
+  font-size: 0.8rem;
+  text-align: center;
+}
+
+.variant-btn.active {
+  border-color: #1abc9c;
+  background: #1a3a3a;
+  color: #2ecc71;
+}
+
+.element-options .variant-picker {
+  flex-wrap: wrap;
+}
+
+.element-options .variant-btn {
+  padding: 0.2rem 0.45rem;
+  font-size: 0.7rem;
+}
+
 .element-options .blocks-picker {
   flex-wrap: wrap;
 }

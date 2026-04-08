@@ -174,6 +174,12 @@ pnpm --filter @mechmarathon/server add <package>
   - Teleporter: changed from ×3 multiplier to +2 bonus, backup becomes -2, blocked if occupied
   - Repulsor: reworked from tile type to side feature, pushes back by full card value with chain-push
   - Added processRadioactiveWasteOptionDraw (option card draw event)
+- [x] Repair tile subtypes + spawn removal (249 total tests)
+  - Three repair variants: wrench (heal 1), hammer_wrench (heal 1 + option card), double_wrench (heal 2)
+  - Variant stored as optional `variant` property on repair tiles (backward compatible)
+  - Ctrl+Click cycles variant in board editor
+  - Removed `spawn` tile type (spawning handled via map-level config, not a board element)
+  - Variant-aware SVG rendering (wrench.svg, hammer_wrench.svg, wrench_wrench.svg)
 
 ### Next Steps
 - [x] Session 2: Core execution tests (executeCard, moveRobot, push mechanics, death/respawn, register execution)
@@ -181,5 +187,6 @@ pnpm --filter @mechmarathon/server add <package>
 - [x] Session 4: Graphics abstraction layer (tile renderer registry, enhanced renderers)
 - [x] Per-element review session 1: push, conveyor, current, drain, trap_pit, randomizer (done)
 - [x] Per-element review session 2: ledge, teleporter, repulsor, portal, water, oil_slick
+- [ ] Implement double_wrench choice UI (heal 2 HP OR option card — currently defaults to heal 2)
 - [ ] Implement reputation updates on game completion
 - [ ] Create the 59 official RoboRally board definitions

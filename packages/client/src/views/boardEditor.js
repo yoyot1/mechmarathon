@@ -55,6 +55,7 @@ let isDragging = false;
 let lastDragCell = null;
 let selectedCell = null;
 let inspectedCell = null; // last interacted tile — shown in sidebar even without selection
+let pendingCycle = null;  // {action, edgeDir, x, y} — deferred cycle for smart-draw same-type mousedown; applied on mouseup-without-drag
 let lastExpandedKey = null;
 let showShortcutsHelp = false;
 let canvasInitialized = false;
@@ -91,10 +92,16 @@ function initTiles() {
   }
 }
 
+function clearArm() {
+  selectedCell = null;
+  inspectedCell = null;
+}
+
 function performUndo() {
   const restored = history.undo(tiles);
   if (restored) {
     tiles = restored;
+    clearArm();
     editorCanvas.rebuildBoard(tiles);
     update();
   }
@@ -104,6 +111,7 @@ function performRedo() {
   const restored = history.redo(tiles);
   if (restored) {
     tiles = restored;
+    clearArm();
     editorCanvas.rebuildBoard(tiles);
     update();
   }
@@ -147,10 +155,21 @@ function onDocumentMouseUp() {
   if (smartDraw.isActive()) {
     const result = smartDraw.finish(tiles, selectedDirection);
     if (result?.singleClick) {
-      // Single-click paint — lightweight sidebar update only (no reflow flicker)
-      inspectedCell = { x: result.pos.x, y: result.pos.y };
-      paintGroundTile(result.pos.x, result.pos.y);
-      updateSidebar();
+      const { x, y } = result.pos;
+      inspectedCell = { x, y };
+      if (pendingCycle && pendingCycle.x === x && pendingCycle.y === y) {
+        // Deferred cycle on a same-type smart-draw tile that was clicked without drag.
+        const newTile = cycleTile(tiles[y][x], pendingCycle.action, pendingCycle.edgeDir);
+        if (newTile) {
+          tiles[y][x] = newTile;
+          editorCanvas.updateTile(x, y, tiles);
+        }
+        updateSidebar();
+      } else {
+        // Single-click paint — lightweight sidebar update only (no reflow flicker)
+        paintGroundTile(x, y);
+        updateSidebar();
+      }
     } else if (result?.applied) {
       if (result.cells?.length > 0) {
         const last = result.cells[result.cells.length - 1];
@@ -159,10 +178,12 @@ function onDocumentMouseUp() {
       editorCanvas.rebuildBoard(tiles);
       update();
     }
+    pendingCycle = null;
     return;
   }
   isDragging = false;
   lastDragCell = null;
+  pendingCycle = null;
 }
 
 export function render(container, params) {
@@ -569,6 +590,17 @@ export function render(container, params) {
   function renderTileInfo(x, y) {
     const tile = tiles[y][x];
     const parts = [`<h4>Tile (${x}, ${y})</h4>`];
+    const isGroundPaintMode = selectedTool !== null && !wallMode && !oneWayWallMode && !selectedSideFeature && !selectedOverlay;
+    const isArmedOverwrite = isGroundPaintMode
+      && tile.type !== 'floor'
+      && selectedTool !== tile.type
+      && selectedCell?.x === x
+      && selectedCell?.y === y;
+    if (isArmedOverwrite) {
+      const fromLabel = TYPE_LABELS[tile.type] || tile.type;
+      const toLabel = TYPE_LABELS[selectedTool] || selectedTool;
+      parts.push(`<div class="overwrite-warning">Click again to replace <strong>${fromLabel}</strong> with <strong>${toLabel}</strong></div>`);
+    }
     parts.push(`<div class="tile-info-row">Ground: <strong>${TYPE_LABELS[tile.type] || tile.type}</strong></div>`);
     if (tile.type === 'gear') {
       const gearLabel = { cw: 'Clockwise', ccw: 'Counter-Clockwise' };
@@ -656,6 +688,7 @@ export function render(container, params) {
         selectedOverlay = null;
         wallMode = false;
         oneWayWallMode = false;
+        clearArm();
         update();
       });
     });
@@ -667,6 +700,7 @@ export function render(container, params) {
         selectedSideFeature = null;
         wallMode = false;
         oneWayWallMode = false;
+        clearArm();
         update();
       });
     });
@@ -677,6 +711,7 @@ export function render(container, params) {
       oneWayWallMode = false;
       selectedSideFeature = null;
       selectedOverlay = null;
+      clearArm();
       update();
     });
 
@@ -686,6 +721,7 @@ export function render(container, params) {
       wallMode = false;
       selectedSideFeature = null;
       selectedOverlay = null;
+      clearArm();
       update();
     });
 
@@ -843,9 +879,21 @@ export function render(container, params) {
     if (isGroundMode) {
       const existingTile = tiles[pos.gridY][pos.gridX];
       if (existingTile.type === selectedTool) {
-        // Tile matches tool — cycle in place instead of repaint
+        // Tile matches tool — cycle in place instead of repaint.
+        // For smart-draw tools, defer the cycle so a drag can resume drawing from this cell.
         const action = getActionFromEvent(e);
         const edgeDir = detectEdge(pos);
+
+        if (SMART_DRAW_TOOLS.has(selectedTool)) {
+          pendingCycle = { action, edgeDir, x: pos.gridX, y: pos.gridY };
+          history.push(tiles);
+          smartDraw.start(pos.gridX, pos.gridY, selectedTool, tiles);
+          selectedCell = { x: pos.gridX, y: pos.gridY };
+          inspectedCell = selectedCell;
+          updateSidebar();
+          updateSelection();
+          return;
+        }
 
         const newTile = cycleTile(existingTile, action, edgeDir);
         if (newTile) {
@@ -868,6 +916,19 @@ export function render(container, params) {
         history.push(tiles);
         smartDraw.start(pos.gridX, pos.gridY, selectedTool, tiles);
         return;
+      }
+      // Overwrite protection: occupied tile + different non-smart tool.
+      // First click arms (selects + shows banner); second click on armed cell commits.
+      if (existingTile.type !== 'floor') {
+        const isArmedCommit = selectedCell?.x === pos.gridX && selectedCell?.y === pos.gridY;
+        if (!isArmedCommit) {
+          selectedCell = { x: pos.gridX, y: pos.gridY };
+          inspectedCell = selectedCell;
+          updateSidebar();
+          updateSelection();
+          return;
+        }
+        // Fall through to commit path below — armed cell is being replaced.
       }
     }
 
@@ -1132,6 +1193,7 @@ export function render(container, params) {
   shortcuts.register('Escape', () => {
     if (smartDraw.isActive()) {
       smartDraw.cancel();
+      pendingCycle = null;
       // Restore from undo stack (undo the in-progress drag)
       const restored = history.undo(tiles);
       if (restored) tiles = restored;
@@ -1144,6 +1206,7 @@ export function render(container, params) {
     wallMode = false;
     oneWayWallMode = false;
     selectedEntry = [];
+    clearArm();
     update();
   }, 'Deselect tool / cancel drag', 'Editing');
   shortcuts.register('w', () => {
@@ -1151,6 +1214,7 @@ export function render(container, params) {
     oneWayWallMode = false;
     selectedSideFeature = null;
     selectedOverlay = null;
+    clearArm();
     update();
   }, 'Wall mode', 'Tools');
   shortcuts.register('e', () => {

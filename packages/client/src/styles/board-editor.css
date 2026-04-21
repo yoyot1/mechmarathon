@@ -275,6 +275,21 @@
   font-size: 0.85rem;
 }
 
+.overwrite-warning {
+  margin: 0 0 0.5rem;
+  padding: 0.45rem 0.55rem;
+  background: rgba(230, 150, 50, 0.12);
+  border: 1px solid #e69632;
+  border-radius: 0.3rem;
+  color: #ffc681;
+  font-size: 0.75rem;
+  line-height: 1.3;
+}
+
+.overwrite-warning strong {
+  color: #fff;
+}
+
 .tile-info-row {
   color: #aaa;
   margin-bottom: 0.25rem;

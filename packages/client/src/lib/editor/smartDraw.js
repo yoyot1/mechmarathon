@@ -52,9 +52,15 @@ export function extend(x, y, tiles, boardSize) {
   // Must be exactly 1 cardinal step
   if (!moveDir) return { applied: false };
 
-  // Self-intersection: allow closing loop back to start cell, reject others
+  // Self-intersection: closing loop back to start, or merging into any earlier path cell
+  // that has already been rendered (has exitDir). 2-cell paths are too short to merge.
   const isStartCell = path.length > 2 && x === path[0].x && y === path[0].y;
-  if (visited.has(`${x},${y}`) && !isStartCell) return { applied: false };
+  if (visited.has(`${x},${y}`)) {
+    if (path.length <= 2) return { applied: false };
+    const pathCell = path.find((c) => c.x === x && c.y === y);
+    if (!pathCell || !pathCell.exitDir) return { applied: false };
+    // Fall through — the merge branch below will treat this as a same-type merge target.
+  }
 
   // Wall checks: exit wall on current cell, entry wall on target cell
   const currentTile = tiles[last.y]?.[last.x];
@@ -89,7 +95,10 @@ export function extend(x, y, tiles, boardSize) {
       // Same conveyor type — attempt merge
       const newEntryDir = OPPOSITE[moveDir]; // entering from opposite of movement direction
       if (canMerge(targetTile, newEntryDir)) {
-        // Loop closure: add entry to start cell's preserveEntry so applyPath handles it
+        // Record the merge entry where it will survive finalization. Three cases:
+        //   - Loop closure into path[0]: append to its preserveEntry.
+        //   - Intra-path merge into any other path cell: append to that cell's mergeEntries.
+        //   - External conveyor (not in path): mutate tiles directly via doMerge.
         if (isStartCell) {
           const startCell = path[0];
           if (startCell.preserveEntry) {
@@ -100,12 +109,20 @@ export function extend(x, y, tiles, boardSize) {
             startCell.preserveEntry = [newEntryDir];
           }
         } else {
-          doMerge(tiles, x, y, newEntryDir);
+          const pathCell = path.find((c) => c.x === x && c.y === y);
+          if (pathCell) {
+            pathCell.mergeEntries = pathCell.mergeEntries || [];
+            if (!pathCell.mergeEntries.includes(newEntryDir)) {
+              pathCell.mergeEntries.push(newEntryDir);
+            }
+          } else {
+            doMerge(tiles, x, y, newEntryDir);
+          }
         }
         stopped = true;
         const cells = applyPath(tiles);
-        // doMerge also modified the target tile — include it
-        if (!isStartCell) cells.push({ x, y });
+        // External merge also mutated the target tile directly — include it so the editor re-renders.
+        if (!isStartCell && !path.some((c) => c.x === x && c.y === y)) cells.push({ x, y });
         return { applied: true, cells };
       } else {
         // Can't merge — stop, last cell exits toward blocked cell
@@ -172,20 +189,32 @@ function applyPath(tiles) {
     const existing = tiles[cell.y][cell.x];
     const newTile = { type: toolType, direction: cell.exitDir };
 
-    // First cell starting on existing conveyor: preserve its entry directions
+    // Build entry list from three sources:
+    //   - preserveEntry (start cell: pre-existing entries and/or loop-closure entry)
+    //   - entryDir       (non-first cells: the curve/straight entry from path traversal)
+    //   - mergeEntries  (intra-path merges from later parts of the same gesture)
+    const entries = [];
     if (cell.preserveEntry !== undefined) {
-      // Filter out entries that are now redundant (implicit straight = OPPOSITE[exitDir])
-      // or invalid (same as new exit direction)
-      const kept = cell.preserveEntry.filter(
-        (e) => e !== OPPOSITE[cell.exitDir] && e !== cell.exitDir
-      );
-      if (kept.length > 0) {
-        newTile.entry = kept;
-      }
-    } else if (cell.entryDir && cell.entryDir !== OPPOSITE[cell.exitDir]) {
-      // Non-first cells: curve if entry dir is not opposite of exit dir
-      newTile.entry = [cell.entryDir];
+      entries.push(...cell.preserveEntry);
+    } else if (cell.entryDir) {
+      entries.push(cell.entryDir);
     }
+    const hasMerge = cell.mergeEntries?.length > 0;
+    if (hasMerge) entries.push(...cell.mergeEntries);
+
+    // Dedupe and drop entries equal to the exit direction.
+    const deduped = [];
+    for (const e of entries) {
+      if (e === cell.exitDir) continue;
+      if (!deduped.includes(e)) deduped.push(e);
+    }
+
+    // When the cell is being merged into, keep implicit-straight explicit (matches doMerge
+    // for external conveyors). Otherwise drop it — a plain straight/curve cell doesn't
+    // need the implicit entry listed.
+    const implicit = OPPOSITE[cell.exitDir];
+    const final = hasMerge ? deduped : deduped.filter((e) => e !== implicit);
+    if (final.length > 0) newTile.entry = final;
 
     // Preserve walls, sideFeatures, overlays, oneWayWalls from existing tile
     if (existing.walls?.length > 0) newTile.walls = existing.walls;

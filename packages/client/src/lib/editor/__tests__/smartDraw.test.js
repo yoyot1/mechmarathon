@@ -418,17 +418,59 @@ describe('smartDraw', () => {
       expect(result).toEqual({ applied: false });
     });
 
-    it('rejects mid-path intersection', () => {
+    it('rejects extending into a path cell that has no exitDir', () => {
+      // Degenerate safety-net case: target is in path but not yet rendered.
+      // Cardinal-step drags can't normally reach this state, but we keep the guard.
       const tiles = makeGrid(4);
       smartDraw.start(0, 0, 'conveyor', tiles);
-      smartDraw.extend(1, 0, tiles, 4);
-      smartDraw.extend(2, 0, tiles, 4);
-      smartDraw.extend(2, 1, tiles, 4);
-      const result = smartDraw.extend(1, 0, tiles, 4); // not start cell
-
-      // This isn't a cardinal step from (2,1) to (1,0), so rejected for that reason
-      // Let's test with a proper intersection
+      // Only path[0] exists so far; a cardinal move back to it is the 2-cell-loop case
+      // which is already rejected by path.length > 2 — this is effectively the same guard.
+      const result = smartDraw.extend(0, 0, tiles, 4);
       expect(result).toEqual({ applied: false });
+    });
+  });
+
+  // --- Intra-path merge ---
+
+  describe('intra-path merge', () => {
+    it('merges mid-path when dragging back to a rendered same-path cell', () => {
+      // User's repro: start (0,1), east, east, south, west, north
+      // Expect (1,2) to exit north; (1,1) to gain a south entry on top of its west entry.
+      const tiles = makeGrid(6);
+      smartDraw.start(0, 1, 'conveyor', tiles);
+      smartDraw.extend(1, 1, tiles, 6);
+      smartDraw.extend(2, 1, tiles, 6);
+      smartDraw.extend(2, 2, tiles, 6);
+      smartDraw.extend(1, 2, tiles, 6);
+      const result = smartDraw.extend(1, 1, tiles, 6); // north into the earlier row
+
+      expect(result.applied).toBe(true);
+
+      // Last drawn cell exits north toward the merge target
+      expect(t(tiles, 1, 2)).toMatchObject({ direction: 'north' });
+
+      // Merged-into cell keeps its west entry and gains a south entry
+      const merged = t(tiles, 1, 1);
+      expect(merged.direction).toBe('east');
+      expect(merged.entry).toContain('west');
+      expect(merged.entry).toContain('south');
+    });
+
+    it('preserves intra-path merge entry after finish()', () => {
+      // Regression guard: applyPath runs again in finish(); the merge entry must survive.
+      const tiles = makeGrid(6);
+      smartDraw.start(0, 1, 'conveyor', tiles);
+      smartDraw.extend(1, 1, tiles, 6);
+      smartDraw.extend(2, 1, tiles, 6);
+      smartDraw.extend(2, 2, tiles, 6);
+      smartDraw.extend(1, 2, tiles, 6);
+      smartDraw.extend(1, 1, tiles, 6); // merge
+      smartDraw.finish(tiles, 'north');
+
+      const merged = t(tiles, 1, 1);
+      expect(merged.entry).toContain('west');
+      expect(merged.entry).toContain('south');
+      expect(t(tiles, 1, 2)).toMatchObject({ direction: 'north' });
     });
   });
 
